@@ -127,3 +127,8 @@
   .mc-grid { grid-template-columns: 1fr 1fr; gap: 10px; }
   .v-actions .soon { flex: 1 1 100%; justify-content: center; }
 }
+
+/* the quiet way in for the team (the team page itself is locked by a password on the real site) */
+.v-foot .team-link { display: inline-flex; align-items: center; gap: 5px; color: var(--muted); text-decoration: none; font-weight: 600; }
+.v-foot .team-link:hover { color: var(--text); text-decoration: underline; }
+.v-foot .team-link .i { width: 13px; height: 13px; }

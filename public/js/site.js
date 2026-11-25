@@ -33,7 +33,7 @@ export function contactHtml(SITE, title) {
     <div class="c-grid">${items.join('')}</div>
     <p class="addr">${C.address ? esc(C.address) + '<br>' : ''}${phones}</p>
   </section>
-  <footer class="v-foot">© ${new Date().getFullYear()} ${esc(SITE.company?.name || '')}</footer>`;
+  <footer class="v-foot">© ${new Date().getFullYear()} ${esc(SITE.company?.name || '')} · <a class="team-link" href="/team">${icon('upload')}Team: upload catalogues</a></footer>`;
 }
 
 export async function share(title, url) {
