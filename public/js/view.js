@@ -4,7 +4,7 @@ import { icon } from '/vendor/icons.js';
 import { pdfjs, PDF_OPTS, fmtSize } from './pdfkit.js';
 import * as M from './motion.js';
 import { esc, ui, contactHtml, shareSheet, qrSheet, blankCover } from './site.js';
-import { bindImage, dissolve } from './particles.js';
+import { bindImage, swallow } from './particles.js';
 
 const $ = (s, el = document) => el.querySelector(s);
 
@@ -163,23 +163,25 @@ function openReader() {
   const onKey = (e) => { if (e.key === 'Escape') close(); };
   window.addEventListener('popstate', onPop);
   document.addEventListener('keydown', onKey);
-  $('#rClose', ov).addEventListener('click', () => close());
+  $('#rClose', ov).addEventListener('click', (e) => { const b = e.currentTarget.getBoundingClientRect(); close(false, { x: b.left + b.width / 2, y: b.top + b.height / 2 }); });
   ov.querySelector('a[download]').addEventListener('click', (e) => M.nudgeDown(e.currentTarget.querySelector('.i')));
 
   let stopReader = () => {};
-  function close(fromBack) {
+  function close(fromBack, at = null) {
     if (!reader) return;
     reader = null;
     window.removeEventListener('popstate', onPop);
     document.removeEventListener('keydown', onKey);
     if (!fromBack) { try { history.back(); } catch {} }
-    // the page in the middle of the screen breaks into grains of its own colours
+    // a black hole opens where X was pressed (or in the middle) and swallows the page you were reading,
+    // grains in its own colours, and the bar with it
     const mid = innerHeight / 2;
     const pageNow = [...ov.querySelectorAll('.page')].find((p) => { const b = p.getBoundingClientRect(); return b.top <= mid && b.bottom >= mid; }) || ov.querySelector('.page');
-    const grains = pageNow ? dissolve(pageNow, { sample: pageNow.querySelector('canvas') || pageNow.querySelector('img'), cols: 56 }) : Promise.resolve();
-    const bar = dissolve(ov.querySelector('.rbar'), { cols: 24 });
+    const hole = at || { x: innerWidth / 2, y: innerHeight / 2 };
+    if (pageNow) swallow(pageNow, { sample: pageNow.querySelector('canvas') || pageNow.querySelector('img'), cols: 56, at: hole });
+    swallow(ov.querySelector('.rbar'), { cols: 24, at: hole });
     stopReader();
-    Promise.all([grains, bar, M.play(ov, [{ opacity: 1 }, { opacity: 0 }], { duration: 520, easing: 'ease-in' })]).then(() => {
+    M.play(ov, [{ opacity: 1 }, { opacity: 0 }], { duration: 560, easing: 'ease-in' }).then(() => {
       ov.querySelectorAll('canvas').forEach((c) => { c.width = c.height = 0; });
       ov.remove();
       document.body.style.overflow = '';

@@ -2,13 +2,14 @@
 import { icon } from '/vendor/icons.js';
 import { qrSvg, qrSvgFile, qrPng, saveBlob } from './qr.js';
 import * as M from './motion.js';
-import { assemble, enableHoverScatter, enableButtonParticles, dissolve } from './particles.js';
+import { assemble, enableHoverScatter, enableButtonParticles, swallow } from './particles.js';
 
 enableHoverScatter();    // big QR codes: the grains scatter away from the mouse or finger
 enableButtonParticles(); // every button press sprays a few grains; download buttons pour them in
 
-// closing a window: it breaks into grains that drift away while the veil clears
-const dissolveOut = (sheet, ov) => Promise.all([dissolve(sheet), M.play(ov, [{ opacity: 1 }, { opacity: 0 }], { duration: 480, easing: 'ease-in' })]);
+// closing a window: a black hole opens where you pressed X and swallows it, while the veil clears
+export const centreOf = (el) => { const b = el.getBoundingClientRect(); return { x: b.left + b.width / 2, y: b.top + b.height / 2 }; };
+const swallowOut = (sheet, ov, at) => { swallow(sheet, { at }); return M.play(ov, [{ opacity: 1 }, { opacity: 0 }], { duration: 480, easing: 'ease-in' }); };
 
 export const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 export const ui = (fn) => { try { fn(); } catch (e) {} };
@@ -75,16 +76,17 @@ export function shareSheet({ link, title, from = null }) {
   document.body.style.overflow = 'hidden';
   const sheet = ov.querySelector('.share-sheet');
   let closing = false;
-  const close = async () => {
+  const close = async (at) => {
     if (closing) return; closing = true;
     document.removeEventListener('keydown', onKey);
-    await dissolveOut(sheet, ov);
+    await swallowOut(sheet, ov, at);
     ov.remove(); document.body.style.overflow = '';
   };
   const onKey = (e) => { if (e.key === 'Escape') close(); };
   document.addEventListener('keydown', onKey);
   ov.addEventListener('click', async (e) => {
-    if (e.target === ov || e.target.closest('[data-x]')) return close();
+    if (e.target === ov) return close();
+    if (e.target.closest('[data-x]')) return close(centreOf(e.target.closest('[data-x]')));
     const b = e.target.closest('.share-opt'); if (!b) return;
     M.bump(b.querySelector('.so-ic'), 1.15);
     if (b.matches('[data-copy]')) {
@@ -118,16 +120,17 @@ export function qrSheet({ link, title }) {
   document.body.style.overflow = 'hidden';
   const sheet = ov.querySelector('.qr-sheet');
   let closing = false;
-  const close = async () => {
+  const close = async (at) => {
     if (closing) return; closing = true;
     document.removeEventListener('keydown', onKey);
-    await dissolveOut(sheet, ov);
+    await swallowOut(sheet, ov, at);
     ov.remove(); document.body.style.overflow = '';
   };
   const onKey = (e) => { if (e.key === 'Escape') close(); };
   document.addEventListener('keydown', onKey);
   ov.addEventListener('click', async (e) => {
-    if (e.target === ov || e.target.closest('[data-x]')) return close();
+    if (e.target === ov) return close();
+    if (e.target.closest('[data-x]')) return close(centreOf(e.target.closest('[data-x]')));
     const b = e.target.closest('button'); if (!b) return;
     if (b.matches('[data-png]')) { M.nudgeDown(b.querySelector('.i')); saveBlob(await qrPng(link, true, 2000), `QR ${safe}.png`); toast('QR picture saved'); }
     if (b.matches('[data-svg]')) { saveBlob(new Blob([await qrSvgFile(link, true)], { type: 'image/svg+xml' }), `QR ${safe}.svg`); toast('Saved: best for printing'); }

@@ -6,7 +6,7 @@ import { qrSvg, qrSvgFile, qrPng, saveBlob } from './qr.js';
 import { inspectPdf, fmtSize } from './pdfkit.js';
 import * as M from './motion.js';
 import { blankCover } from './site.js';
-import { collapseFrom, assemble, enableHoverScatter, enableButtonParticles, dissolve } from './particles.js';
+import { collapseFrom, assemble, enableHoverScatter, enableButtonParticles, swallow } from './particles.js';
 import { takeFiles } from './handoff.js';
 
 const $ = (s, el = document) => el.querySelector(s);
@@ -287,7 +287,7 @@ function openSheet(html, { wide = false, locked = false } = {}) {
   return sh;
 }
 // quiet = the sheet's content has just flown away somewhere; only the veil clears
-function closeSheet(force, { quiet = false } = {}) {
+function closeSheet(force, { quiet = false, at = null } = {}) {
   if (S.sheetLocked && !force) return;
   const gen = ++S.sheetGen;
   const sh = $('#sheet'), ov = $('#overlay');
@@ -295,9 +295,9 @@ function closeSheet(force, { quiet = false } = {}) {
   document.body.style.overflow = '';
   if (S.sheetResolve) { const r = S.sheetResolve; S.sheetResolve = null; r('closed'); }
   if (quiet) sh.style.visibility = 'hidden';
-  // closing: the window breaks into grains that drift away while the veil clears
-  const veil = M.play(ov, [{ opacity: 1 }, { opacity: 0 }], { duration: quiet ? 240 : 480, easing: 'ease-in' });
-  const anim = quiet ? veil : Promise.all([dissolve(sh), veil]);
+  // closing: a black hole opens where X was pressed and swallows the window, while the veil clears
+  const anim = M.play(ov, [{ opacity: 1 }, { opacity: 0 }], { duration: quiet ? 240 : 480, easing: 'ease-in' });
+  if (!quiet) swallow(sh, { at });
   ov.style.pointerEvents = 'none';
   anim.then(() => {
     ov.style.pointerEvents = '';
@@ -724,7 +724,12 @@ function wire() {
 
   // sheet: close by the X, Cancel, the veil, or Esc
   $('#overlay').addEventListener('click', (e) => {
-    if (e.target.id === 'overlay' || e.target.closest('[data-sheet="close"]')) closeSheet(e.target.closest('[data-sheet="close"]') && !S.busy);
+    const btn = e.target.closest('[data-sheet="close"]');
+    if (e.target.id === 'overlay' || btn) {
+      let at = null;
+      if (btn) { const b = btn.getBoundingClientRect(); at = { x: b.left + b.width / 2, y: b.top + b.height / 2 }; }
+      closeSheet(btn && !S.busy, { at });
+    }
   });
   document.addEventListener('keydown', (e) => { if (e.key === 'Escape' && !$('#overlay').hidden) closeSheet(); });
 

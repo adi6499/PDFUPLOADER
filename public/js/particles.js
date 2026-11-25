@@ -488,9 +488,11 @@ export function pour(btn, fromRect = null, { n = 70, colors = ['rgb(17,17,19)', 
   });
 }
 
-// `el` breaks into grains that drift up and away, sweeping from left to right. It is hidden at once;
-// the promise ends when the grains have gone. `sample` (a canvas or picture) gives the grains their colours.
-export function dissolve(el, { sample = null, cols = 48 } = {}) {
+// `el` is swallowed by a black hole: it breaks into grains that spiral into a small dark hole at `at`
+// (the X that was pressed; the middle of `el` if not given), faster and faster, and the hole closes behind them.
+// `el` is hidden at once; the promise ends when the hole has closed. `sample` (a canvas or picture) gives the grains
+// their colours; otherwise they take the colour of the panel itself.
+export function swallow(el, { sample = null, cols = 48, at = null } = {}) {
   return new Promise((resolve) => {
     try {
       if (calm() || !el) { resolve(); return; }
@@ -509,29 +511,53 @@ export function dissolve(el, { sample = null, cols = 48 } = {}) {
       const surface = colourOf(el);
       let ink = 'rgb(17,17,19)';
       try { ink = getComputedStyle(el).color || ink; } catch {}
-      const cw = r.width / cols, ch = r.height / rows;
+      const cx = at && isFinite(at.x) ? at.x : r.left + r.width / 2;
+      const cy = at && isFinite(at.y) ? at.y : r.top + r.height / 2;
+      const cw = r.width / cols, ch = r.height / rows, gs = Math.max(cw, ch);
+      const rmax = Math.max(Math.hypot(r.left - cx, r.top - cy), Math.hypot(r.right - cx, r.top - cy), Math.hypot(r.left - cx, r.bottom - cy), Math.hypot(r.right - cx, r.bottom - cy)) || 1;
+      const dir = Math.random() < 0.5 ? 1 : -1; // the whole swirl turns one way
       const ps = [];
       for (let j = 0; j < rows; j++) for (let i = 0; i < cols; i++) {
         const k = (j * cols + i) * 4;
         const col = px ? `rgb(${px[k]},${px[k + 1]},${px[k + 2]})` : (Math.random() < 0.04 ? ink : surface);
-        const a = -Math.PI / 2 + (Math.random() - 0.5) * 2.4, v = 40 + Math.random() * 140;
-        ps.push({ x: r.left + i * cw, y: r.top + j * ch, vx: Math.cos(a) * v, vy: Math.sin(a) * v, col,
-          delay: (i / cols) * 220 + Math.random() * 120, life: 420 + Math.random() * 280 });
+        const x0 = r.left + i * cw, y0 = r.top + j * ch;
+        const dx = x0 + cw / 2 - cx, dy = y0 + ch / 2 - cy, r0 = Math.hypot(dx, dy);
+        ps.push({ x0, y0, col, r0, th0: Math.atan2(dy, dx),
+          delay: (r0 / rmax) * 300 + Math.random() * 110,      // the nearest grains fall in first
+          dur: 520 + Math.random() * 260,
+          spin: dir * (2.4 + Math.random() * 1.6) });           // how far each one turns on its way in
       }
       el.style.visibility = 'hidden';
+      const coreMax = Math.max(10, Math.min(26, Math.min(r.width, r.height) * 0.07));
+      const total = 300 + 110 + 780 + 140;
       const t0 = performance.now();
       let done = false;
       const finish = () => { if (!done) { done = true; resolve(); } };
-      setTimeout(finish, 1400);
+      setTimeout(finish, 1900);
       fxAdd({
         draw(g, dpr, now) {
-          const el2 = now - t0; let alive = false;
+          const el2 = now - t0;
+          let alive = false;
           for (const p of ps) {
-            const t = (el2 - p.delay) / p.life;
-            if (t >= 1) continue; alive = true;
-            if (t <= 0) { dot(g, dpr, p.x, p.y, Math.max(cw, ch) + 0.6, p.col, 1); continue; } // still part of the window
-            const sec = (el2 - p.delay) / 1000, k = 1 - t;
-            dot(g, dpr, p.x + p.vx * sec, p.y + p.vy * sec, Math.max(1.2, Math.max(cw, ch) * k), p.col, Math.min(1, k * 1.5));
+            const t = clamp01((el2 - p.delay) / p.dur);
+            if (t >= 1) continue;
+            alive = true;
+            if (el2 < p.delay) { dot(g, dpr, p.x0, p.y0, gs + 0.6, p.col, 1); continue; } // still part of the panel
+            const e = t * t;                                     // speeds up as it falls in
+            const rr = p.r0 * (1 - e), th = p.th0 + p.spin * e * e;
+            const s = Math.max(0.8, gs * (1 - 0.85 * e));
+            dot(g, dpr, cx + Math.cos(th) * rr - s / 2, cy + Math.sin(th) * rr - s / 2, s, p.col, t > 0.9 ? (1 - t) / 0.1 : 1);
+          }
+          // the hole: opens, holds while the grains fall in, then closes
+          const hp = clamp01(el2 / total);
+          const open = hp < 0.18 ? easeInOut(hp / 0.18) : hp > 0.82 ? 1 - easeInOut((hp - 0.82) / 0.18) : 1;
+          const hr = coreMax * open;
+          if (hr > 0.4) {
+            g.beginPath(); g.arc(cx * dpr, cy * dpr, hr * dpr, 0, Math.PI * 2);
+            g.fillStyle = 'rgb(5,5,6)'; g.fill();
+            g.beginPath(); g.arc(cx * dpr, cy * dpr, (hr + 2.2) * dpr, 0, Math.PI * 2);
+            g.lineWidth = 1.6 * dpr; g.strokeStyle = 'rgba(234,88,12,.75)'; g.stroke();   // its thin orange edge
+            alive = alive || hp < 1;
           }
           if (!alive) finish();
           return alive;
@@ -541,6 +567,8 @@ export function dissolve(el, { sample = null, cols = 48 } = {}) {
     } catch { resolve(); }
   });
 }
+// (the earlier name; closing used to scatter the panel)
+export const dissolve = swallow;
 
 // Every button press sprays a few grains; download buttons pour grains in instead.
 let buttonsInstalled = false;
