@@ -1,5 +1,12 @@
-// Talking to the server. Every screen goes through these few functions,
-// so moving the site to another host later only means changing this file.
+// Talking to the server. Every screen goes through these few functions.
+// Two ways of sending a PDF, chosen by the server (see /api/info "storage"):
+//   'disk' - the company server: the PDF goes to our own server, which saves it on its disk
+//   'blob' - the Vercel trial copy: the PDF goes straight into Vercel's file storage (Vercel's
+//            program part cannot take files over 4.5 MB), then the server checks it and lists it
+let MODE = 'disk';
+export const setMode = (m) => { MODE = m === 'blob' ? 'blob' : 'disk'; };
+
+const NOT_CONNECTED = 'This page is not connected to the Jinharsh Docs program.';
 
 async function call(method, url, body) {
   const opt = { method, headers: {} };
@@ -7,7 +14,7 @@ async function call(method, url, body) {
   let r;
   try { r = await fetch(url, opt); } catch { throw new Error('Cannot reach the server. Check the internet connection.'); }
   const j = await r.json().catch(() => null);
-  if (j === null) throw new Error('This page is not connected to the Jinharsh Docs program.');
+  if (j === null) throw new Error(NOT_CONNECTED);
   if (r.status === 401) { location.reload(); throw new Error('Please sign in again.'); }
   if (!r.ok) throw new Error(j.error || 'Something went wrong (' + r.status + ').');
   return j;
@@ -20,7 +27,7 @@ export const suggestCode = () => call('GET', '/api/check-code?suggest=1').then((
 export const updateDoc = (code, patch) => call('PATCH', '/api/docs/' + encodeURIComponent(code), patch);
 export const deleteDoc = (code) => call('DELETE', '/api/docs/' + encodeURIComponent(code));
 
-// Sends the PDF itself, reporting progress (0..1) as it goes.
+// company server: sends the PDF itself, reporting progress (0..1) as it goes
 function upload(url, file, onProgress) {
   return new Promise((ok, no) => {
     const x = new XMLHttpRequest();
@@ -39,13 +46,37 @@ function upload(url, file, onProgress) {
   });
 }
 
-export function createDoc(file, { title, code, pages }, onProgress) {
+// trial copy: the PDF goes straight into Vercel's storage, under the name the server expects
+async function toBlobStore(pathname, file, onProgress) {
+  const { upload: put } = await import('/vendor/blob-client.mjs');
+  try {
+    return await put(pathname, file, {
+      access: 'public', handleUploadUrl: '/api/blob-upload', contentType: 'application/pdf',
+      multipart: file.size > 8 * 1048576,
+      onUploadProgress: (e) => { if (onProgress && e.total) onProgress(e.loaded / e.total, e.loaded, e.total); },
+    });
+  } catch (e) {
+    // the server's own reason (for example "That name is already used") is inside the message
+    const m = String((e && e.message) || '').replace(/^Vercel Blob:\s*/i, '').replace(/^Failed to\s+retrieve the client token\s*/i, '');
+    throw new Error(m || 'The upload stopped. Check the internet connection and try again.');
+  }
+}
+
+export async function createDoc(file, { title, code, pages }, onProgress) {
+  if (MODE === 'blob') {
+    const b = await toBlobStore(`docs/${code}/v1.pdf`, file, onProgress);
+    return call('POST', '/api/docs?code=' + encodeURIComponent(code), { title, name: file.name, pages, pathname: b.pathname });
+  }
   const q = new URLSearchParams({ title: title || '', name: file.name, pages: pages || '' });
   if (code) q.set('code', code);
   return upload('/api/docs?' + q, file, onProgress);
 }
 
-export function addVersion(code, file, { pages }, onProgress) {
+export async function addVersion(code, file, { pages, nextV }, onProgress) {
+  if (MODE === 'blob') {
+    const b = await toBlobStore(`docs/${code}/v${nextV}.pdf`, file, onProgress);
+    return call('POST', '/api/docs/' + encodeURIComponent(code) + '/versions', { name: file.name, pages, pathname: b.pathname });
+  }
   const q = new URLSearchParams({ name: file.name, pages: pages || '' });
   return upload('/api/docs/' + encodeURIComponent(code) + '/versions?' + q, file, onProgress);
 }

@@ -45,6 +45,16 @@ On the company aaPanel server, step by step: [deploy/SERVER-SETUP.md](deploy/SER
 On a real address the team page stays locked until a team password is set with `npm run password`
 (on this computer, with no password, it is open: nobody else can reach it).
 
+## Trial copy on Vercel
+
+The GitHub repository is also connected to a Vercel project (`pdf`) for trying things out. There the same
+program keeps its files in a **Vercel Blob** store instead of a disk (`server/blobstore.mjs`, `api/index.js`,
+`vercel.json`). To make it work: Vercel → project `pdf` → **Storage** → **Create** → **Blob** → connect it to the
+project → redeploy. Free limits: 1 GB of files, 10 GB of downloads a month; when a limit is reached Vercel pauses
+the storage for the month, it never charges. Trial QR codes point to the vercel.app address: **never print them**.
+In the trial the team page is open to anyone with the address, and opens are not counted.
+`npm run test:trial` checks the trial storage rules with a pretend store.
+
 ## Settings
 
 - `config.json`: `port`, `host`, `trustProxy` (true behind nginx), `publicUrl` (**the address printed inside every QR**; empty = this computer only,

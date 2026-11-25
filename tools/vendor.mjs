@@ -57,4 +57,13 @@ writeFileSync(join(out, 'icons.js'),
   "export function icon(name, cls) { const p = ICONS[name] || ''; return '<svg class=\"i' + (cls ? ' ' + cls : '') + '\" viewBox=\"0 0 24 24\" fill=\"none\" stroke=\"currentColor\" stroke-width=\"2\" stroke-linecap=\"round\" stroke-linejoin=\"round\" aria-hidden=\"true\">' + p + '</svg>'; }\n");
 cpSync(join(nm, 'lucide-static', 'LICENSE'), join(out, 'icons.LICENSE'));
 
+// 6. Vercel Blob upload helper (Apache-2.0): only the trial copy on Vercel uses it, to send PDFs straight into its storage
+const { build } = await import('esbuild');
+await build({
+  entryPoints: [join(nm, '@vercel/blob', 'dist', 'client.js')], bundle: true, format: 'esm', platform: 'browser',
+  target: 'es2020', minify: true, outfile: join(out, 'blob-client.mjs'), legalComments: 'none', logLevel: 'warning',
+  define: { 'process.env': '{}' }, // server-only settings: always empty in a browser
+});
+cpSync(join(nm, '@vercel/blob', 'license.md'), join(out, 'blob-client.LICENSE.md'));
+
 console.log('Vendor files copied to public/vendor');

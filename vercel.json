@@ -1,0 +1,15 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "rewrites": [
+    { "source": "/api/:path*", "destination": "/api/index?__p=/api/:path*" },
+    { "source": "/c/:path*", "destination": "/api/index?__p=/c/:path*" },
+    { "source": "/f/:path*", "destination": "/api/index?__p=/f/:path*" },
+    { "source": "/cover/:path*", "destination": "/api/index?__p=/cover/:path*" }
+  ],
+  "functions": {
+    "api/index.js": {
+      "includeFiles": "{public/view.html,site.json,package.json,config.json}",
+      "maxDuration": 30
+    }
+  }
+}

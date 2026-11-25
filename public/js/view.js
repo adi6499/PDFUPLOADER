@@ -67,7 +67,7 @@ function showDoc() {
   const cover = D.cover
     ? `<img src="${D.cover}" alt="Cover of ${esc(D.title)}" width="${D.coverW || 720}" height="${D.coverH || 1018}" fetchpriority="high">`
     : `<div class="blank">${icon('file-text')}</div>`;
-  const dl = D.file + '?dl=1';
+  const dl = D.download || D.file + '?dl=1';
   app.innerHTML = `
     <section class="v-hero">
       <div class="v-cover">${cover}</div>
@@ -115,7 +115,7 @@ function showDoc() {
   ui(() => { const s = $('#shareTop'); s.hidden = false; s.innerHTML = icon('share-2'); s.addEventListener('click', () => share(D.title)); });
 
   // one count per visit (the team's own "Open page" adds ?preview=1 and is not counted)
-  if (!preview) ui(() => {
+  if (!preview && BOOT.countsScans !== false) ui(() => {
     const k = 'seen_' + D.code;
     if (sessionStorage.getItem(k)) return;
     sessionStorage.setItem(k, '1');

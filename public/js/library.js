@@ -54,20 +54,26 @@ async function start() {
     const inf = await API.info();
     if (!inf || !inf.publicUrl) throw new Error('no program');
     S.publicUrl = inf.publicUrl; S.printable = inf.printable; S.maxUploadMB = inf.maxUploadMB; S.version = inf.version; S.auth = inf.auth;
+    S.trial = !!inf.trial; S.storage = inf.storage; S.countsScans = inf.countsScans !== false;
+    API.setMode(inf.storage);
+    if (inf.storageReady === false) return offline('storage');
   } catch (e) { return offline(); }
   await reload();
 }
 
 // The page was opened from somewhere that only shows the files (a plain web host, or a copy of the folder),
 // not from the Jinharsh Docs program. Say so plainly instead of letting an upload fail at the end.
-function offline() {
+function offline(why) {
   S.offline = true;
   const here = location.origin.startsWith('http') ? location.host : 'a file on this computer';
   $('#previewWarn').hidden = true;
-  $('#answer').outerHTML = `<section class="ju-card notice-card"><div class="notice warn" style="margin:0">${icon('circle-alert')}<div>
-    <b>This page is not connected to the Jinharsh Docs program, so nothing can be uploaded here.</b>
+  const text = why === 'storage'
+    ? `<b>This trial copy has no file storage yet, so nothing can be uploaded here.</b>
+    <p>In Vercel, open the project <span class="mono">pdf</span> → <b>Storage</b> → <b>Create</b> → <b>Blob</b> → connect it to this project, then redeploy. After that, uploads work here.</p>`
+    : `<b>This page is not connected to the Jinharsh Docs program, so nothing can be uploaded here.</b>
     <p>It was opened from <span class="mono">${esc(here)}</span>, which only shows the page. Open <span class="mono">http://localhost:8180</span> on this computer
-    (start it with <span class="mono">npm start</span> in the JINHARSH-DOCS folder), or <span class="mono">https://docs.jinharsh.com</span> once it is online.</p></div></div></section>`;
+    (start it with <span class="mono">npm start</span> in the JINHARSH-DOCS folder), or <span class="mono">https://docs.jinharsh.com</span> once it is online.</p>`;
+  $('#answer').outerHTML = `<section class="ju-card notice-card"><div class="notice warn" style="margin:0">${icon('circle-alert')}<div>${text}</div></div></section>`;
   $('#tiles').innerHTML = '';
   $('#list').innerHTML = `<div class="empty"><div class="art">${icon('circle-alert')}</div><h3>Not connected</h3><p>Your documents and their QR codes show up here when the page is opened from the program.</p></div>`;
 }
@@ -92,7 +98,9 @@ function renderWarn() {
   const w = $('#previewWarn');
   if (S.printable) { w.hidden = true; return; }
   w.hidden = false;
-  w.innerHTML = icon('circle-alert') + `<div><b>Preview only: do not print these QR codes yet.</b><p>They point to <span class="mono">${esc(S.publicUrl)}</span>, which works only on this computer. Once the site is online at its real address, every code becomes final and you can print it.</p></div>`;
+  w.innerHTML = icon('circle-alert') + (S.trial
+    ? `<div><b>Trial copy: do not print these QR codes.</b><p>They point to <span class="mono">${esc(S.publicUrl)}</span>, this trial copy. The real codes will use <span class="mono">docs.jinharsh.com</span> once it is online. In the trial, anyone with this address can upload or delete, and opens are not counted.</p></div>`
+    : `<div><b>Preview only: do not print these QR codes yet.</b><p>They point to <span class="mono">${esc(S.publicUrl)}</span>, which works only on this computer. Once the site is online at its real address, every code becomes final and you can print it.</p></div>`);
 }
 
 function renderAnswer() {
@@ -196,7 +204,7 @@ function detailHtml(d) {
   return `<div class="detail">
     <div class="qr-col">
       <div class="qr-tile big-qr">${QR(d.link, d.title)}</div>
-      <div class="lock"${S.printable ? '' : ' style="color:var(--warn)"'}>${icon(S.printable ? 'lock' : 'circle-alert')}${S.printable ? 'Permanent. This QR never changes.' : 'Preview code. Final once the site is online.'}</div>
+      <div class="lock"${S.printable ? '' : ' style="color:var(--warn)"'}>${icon(S.printable ? 'lock' : 'circle-alert')}${S.printable ? 'Permanent. This QR never changes.' : S.trial ? 'Trial code. Do not print.' : 'Preview code. Final once the site is online.'}</div>
     </div>
     <div class="info-col">
       ${archived ? `<div class="notice warn" style="margin:0">${icon('archive')}<div><b>Archived.</b><p>Anyone who scans this QR sees “no longer available” and your contact details. Bring it back any time.</p></div></div>` : ''}
@@ -420,7 +428,7 @@ function showDone(sh, doc, idx, count, resolveAll) {
       <div class="done">
         <div class="tick">${icon('circle-check')}Uploaded</div>
         <h2>Your QR code is ready</h2>
-        <p class="sub">${esc(doc.title)}${S.printable ? '' : ' · preview code, print it once the site is online'}</p>
+        <p class="sub">${esc(doc.title)}${S.printable ? '' : S.trial ? ' · trial code, do not print' : ' · preview code, print it once the site is online'}</p>
         <div class="qr-tile" id="doneQr">${QR(doc.link, doc.title)}</div>
         <div class="linkline"><a href="/c/${esc(doc.code)}?preview=1" target="_blank" rel="noopener">${esc(shortLink(doc.link))}</a><button class="ju-icon" type="button" data-copy="${esc(doc.link)}" aria-label="Copy link">${icon('copy')}</button></div>
         <div class="btns">
@@ -489,7 +497,7 @@ async function startReplace(file) {
     });
     try {
       await inspecting;
-      let doc = await API.addVersion(d.code, file, { pages: info?.pages }, (p, a, b) => {
+      let doc = await API.addVersion(d.code, file, { pages: info?.pages, nextV: Math.max(...d.versions.map((x) => x.v)) + 1 }, (p, a, b) => {
         $('#pBar', sh).style.width = Math.round(p * 96) + '%';
         $('#pNum', sh).textContent = `${fmtSize(a)} of ${fmtSize(b)}`;
       });

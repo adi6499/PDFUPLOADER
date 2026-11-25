@@ -19,7 +19,7 @@ const AUTO_LEN = 5;
 export const CODE_RE = /^[a-z0-9](?:[a-z0-9-]{0,30}[a-z0-9])?$/;
 const RESERVED = new Set(['api', 'c', 'f', 'cover', 'vendor', 'js', 'css', 'assets', 'admin', 'new', 'login', 'logout', 'settings', 'help']);
 
-const nowIso = () => new Date().toISOString();
+export const nowIso = () => new Date().toISOString();
 const istDay = (d = new Date()) => d.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
 
 export function cleanTitle(t) {
@@ -93,16 +93,30 @@ export class Store {
   filePath(code, v) { return join(this.docsDir, code, 'v' + v + '.pdf'); }
   coverPath(code, v, ext) { return join(this.docsDir, code, 'v' + v + '.' + ext); }
 
-  async create({ title, code, tmp, size, name, pages }) {
-    code = code ? code : this.newCode();
-    const dir = join(this.docsDir, code);
-    await fs.mkdir(dir, { recursive: true });
-    await fs.rename(tmp, this.filePath(code, 1));
+  // ---- where the files physically go (a hosted copy can swap these for another kind of storage) ----
+  kind = 'disk';
+  async refresh() {}
+  async placeFile(code, v, input) {
+    await fs.mkdir(join(this.docsDir, code), { recursive: true });
+    await fs.rename(input.tmp, this.filePath(code, v));
+    return {};
+  }
+  async writeCover(code, v, ext, buf, old) {
+    if (old && old.ext !== ext) await fs.rm(this.coverPath(code, v, old.ext), { force: true });
+    await fs.writeFile(this.coverPath(code, v, ext), buf);
+    return {};
+  }
+  async removeFiles(code) { await fs.rm(join(this.docsDir, code), { recursive: true, force: true }); }
+
+  async create(input) {
+    const { title, size, name, pages } = input;
+    const code = input.code ? input.code : this.newCode();
+    const extra = await this.placeFile(code, 1, input);
     const t = nowIso();
     const doc = {
       code, title: cleanTitle(title) || cleanFileName(name).replace(/\.pdf$/i, ''), note: '',
       status: 'live', createdAt: t, updatedAt: t, current: 1,
-      versions: [{ v: 1, name: cleanFileName(name), size, pages: pages || null, uploadedAt: t, cover: null }],
+      versions: [{ v: 1, name: cleanFileName(name), size, pages: pages || null, uploadedAt: t, cover: null, ...extra }],
       scans: 0, lastScanAt: null, scanDays: {},
     };
     this.db.docs.unshift(doc);
@@ -110,11 +124,14 @@ export class Store {
     return doc;
   }
 
-  async addVersion(doc, { tmp, size, name, pages }) {
-    const v = Math.max(...doc.versions.map(x => x.v)) + 1;
-    await fs.rename(tmp, this.filePath(doc.code, v));
+  nextVersion(doc) { return Math.max(...doc.versions.map(x => x.v)) + 1; }
+
+  async addVersion(doc, input) {
+    const { size, name, pages } = input;
+    const v = this.nextVersion(doc);
+    const extra = await this.placeFile(doc.code, v, input);
     const t = nowIso();
-    doc.versions.push({ v, name: cleanFileName(name), size, pages: pages || null, uploadedAt: t, cover: null });
+    doc.versions.push({ v, name: cleanFileName(name), size, pages: pages || null, uploadedAt: t, cover: null, ...extra });
     doc.current = v; doc.updatedAt = t;
     await this.save();
     return doc;
@@ -123,9 +140,8 @@ export class Store {
   async setCover(doc, v, ext, buf, w, h) {
     const ver = doc.versions.find(x => x.v === v);
     if (!ver) return null;
-    if (ver.cover && ver.cover.ext !== ext) await fs.rm(this.coverPath(doc.code, v, ver.cover.ext), { force: true });
-    await fs.writeFile(this.coverPath(doc.code, v, ext), buf);
-    ver.cover = { ext, w: w || null, h: h || null, at: nowIso() };
+    const extra = await this.writeCover(doc.code, v, ext, buf, ver.cover);
+    ver.cover = { ext, w: w || null, h: h || null, at: nowIso(), ...extra };
     await this.save();
     return ver;
   }
@@ -145,7 +161,7 @@ export class Store {
 
   // Removes the files for good. The code stays reserved, so an old printed QR can never open someone else's PDF.
   async remove(doc) {
-    await fs.rm(join(this.docsDir, doc.code), { recursive: true, force: true });
+    await this.removeFiles(doc.code);
     this.db.docs = this.db.docs.filter(d => d !== doc);
     if (!this.db.retired.includes(doc.code)) this.db.retired.push(doc.code);
     await this.save();
