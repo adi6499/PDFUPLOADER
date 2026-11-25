@@ -185,13 +185,20 @@ export function collapseFrom(tile, link) {
 }
 
 // Scattered grains collapse into the middle of `tile`, then come together as its QR.
-export function assemble(tile, link) {
+// With { from: element }, the grains burst out of that element (for example the Share button) instead.
+export function assemble(tile, link, { from = null } = {}) {
   const c = cellsOf(tile, link);
   if (!c || calm()) return;
   const s = swarm();
   const R = Math.max(innerWidth, innerHeight) * 0.42;
   const n = Math.min(c.cells.length, 1800);
+  const fr = from && from.getBoundingClientRect ? from.getBoundingClientRect() : null;
   const pts = Array.from({ length: n }, () => {
+    if (fr && fr.width) {
+      // out of the button: start inside it, already flung a little outward
+      const a = Math.random() * Math.PI * 2, d = Math.random() * 46;
+      return { x: fr.left + Math.random() * fr.width + Math.cos(a) * d, y: fr.top + Math.random() * fr.height + Math.sin(a) * d, s: 1 + Math.random() * 2, c0: 0 };
+    }
     const a = Math.random() * Math.PI * 2, d = R * (0.4 + Math.random() * 0.6);
     return { x: c.cx + Math.cos(a) * d, y: c.cy + Math.sin(a) * d, s: 1 + Math.random() * 2.2, c0: 0 };
   });

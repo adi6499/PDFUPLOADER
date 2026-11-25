@@ -46,6 +46,53 @@ export async function share(title, url) {
   try { await navigator.clipboard.writeText(url); toast('Link copied'); } catch { window.prompt('Copy this link:', url); }
 }
 
+// The Share window: grains burst out of the Share button and bind together as the QR code,
+// with the ways to send it underneath (WhatsApp, email, copy link, the QR picture, and the phone's own share menu).
+export function shareSheet({ link, title, from = null }) {
+  const ov = document.createElement('div');
+  ov.className = 'ju-overlay';
+  const safe = String(title || 'Jinharsh catalogues').replace(/[\\/:*?"<>|]+/g, ' ').trim().slice(0, 90);
+  const msg = `${title} ${link}`;
+  ov.innerHTML = `<div class="ju-sheet qr-sheet share-sheet" role="dialog" aria-modal="true" aria-label="Share">
+    <button class="ju-icon close-x" type="button" data-x aria-label="Close">${icon('x')}</button>
+    <div class="ju-eyebrow">Share</div>
+    <h2>${esc(title)}</h2>
+    <div class="qr-tile qr-big" data-link="${esc(link)}">${qrSvg(link, { logo: true, title })}</div>
+    <p class="qr-link mono">${esc(shortLink(link))}</p>
+    <div class="share-grid">
+      <a class="share-opt" href="https://wa.me/?text=${encodeURIComponent(msg)}" target="_blank" rel="noopener"><span class="so-ic wa">${icon('message-circle')}</span><span>WhatsApp</span></a>
+      <a class="share-opt" href="mailto:?subject=${encodeURIComponent(title)}&body=${encodeURIComponent(title + '\n' + link)}"><span class="so-ic">${icon('mail')}</span><span>Email</span></a>
+      <button class="share-opt" type="button" data-copy><span class="so-ic">${icon('copy')}</span><span>Copy link</span></button>
+      <button class="share-opt" type="button" data-png><span class="so-ic">${icon('download')}</span><span>QR picture</span></button>
+      ${navigator.share ? `<button class="share-opt" type="button" data-more><span class="so-ic">${icon('share-2')}</span><span>More…</span></button>` : ''}
+    </div>
+  </div>`;
+  document.body.appendChild(ov);
+  document.body.style.overflow = 'hidden';
+  const sheet = ov.querySelector('.share-sheet');
+  let closing = false;
+  const close = async () => {
+    if (closing) return; closing = true;
+    document.removeEventListener('keydown', onKey);
+    await M.leave(sheet, ov);
+    ov.remove(); document.body.style.overflow = '';
+  };
+  const onKey = (e) => { if (e.key === 'Escape') close(); };
+  document.addEventListener('keydown', onKey);
+  ov.addEventListener('click', async (e) => {
+    if (e.target === ov || e.target.closest('[data-x]')) return close();
+    const b = e.target.closest('.share-opt'); if (!b) return;
+    M.bump(b.querySelector('.so-ic'), 1.15);
+    if (b.matches('[data-copy]')) {
+      try { await navigator.clipboard.writeText(link); toast('Link copied'); b.querySelector('span:last-child').textContent = 'Copied'; } catch { window.prompt('Copy this link:', link); }
+    }
+    if (b.matches('[data-png]')) { saveBlob(await qrPng(link, true, 2000), `QR ${safe}.png`); toast('QR picture saved'); }
+    if (b.matches('[data-more]')) { try { await navigator.share({ title, text: title, url: link }); } catch {} }
+  });
+  // the grains come out of the button that was pressed (or from all around)
+  setTimeout(() => assemble(ov.querySelector('.qr-big'), link, { from }), 60);
+}
+
 // The public "QR code" window: the catalogue's own QR (with the Jinharsh logo), ready for posters and stands.
 export function qrSheet({ link, title }) {
   const ov = document.createElement('div');

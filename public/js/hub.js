@@ -3,7 +3,7 @@
 import { icon } from '/vendor/icons.js';
 import { fmtSize } from './pdfkit.js';
 import * as M from './motion.js';
-import { esc, ui, contactHtml, share, qrSheet, blankCover, toast } from './site.js';
+import { esc, ui, contactHtml, shareSheet, qrSheet, blankCover, toast } from './site.js';
 import { saveFiles } from './handoff.js';
 
 const $ = (s, el = document) => el.querySelector(s);
@@ -45,7 +45,7 @@ fetch('/api/info').then((r) => r.json()).then((inf) => {
   window.addEventListener('dragleave', () => { depth = Math.max(0, depth - 1); if (!depth) $('#dropVeil').hidden = true; });
   window.addEventListener('drop', (e) => { if (!hasFiles(e)) return; e.preventDefault(); depth = 0; $('#dropVeil').hidden = true; toTeam(e.dataTransfer.files); });
 }).catch(() => {});
-$('#hubShare').addEventListener('click', () => share('Jinharsh Catalogues', S.publicUrl + '/'));
+$('#hubShare').addEventListener('click', (e) => shareSheet({ link: S.publicUrl + '/', title: 'Jinharsh Catalogues', from: e.currentTarget }));
 
 // waiting shapes while the list arrives (plain, nothing moves or shines)
 $('#cards').innerHTML = Array.from({ length: 6 }, () => '<div class="cat-card ghost-card"><div class="cc-cover"></div><div class="cc-body"><i></i><i></i></div></div>').join('');

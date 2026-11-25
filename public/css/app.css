@@ -275,3 +275,22 @@ html.vt-theme::view-transition-old(root), html.vt-theme::view-transition-new(roo
 
 /* a finger that starts on a big QR code moves its grains (particles.js) instead of scrolling; no long-press image menu */
 .qr-tile[data-link] { touch-action: none; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+
+/* ---------- the Share window ---------- */
+.share-sheet .ju-eyebrow { margin-bottom: 4px; }
+.share-sheet h2 { margin: 0 0 14px; }
+.share-sheet .qr-big { width: min(230px, 62vw); margin: 0 auto 12px; }
+.share-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(84px, 1fr)); gap: 8px; margin-top: 4px; }
+.share-opt { display: flex; flex-direction: column; align-items: center; gap: 7px; padding: 12px 6px 10px; border: 0; border-radius: 18px;
+  background: var(--bg); color: var(--text); font: inherit; font-size: 12.5px; font-weight: 650; text-decoration: none; cursor: pointer;
+  transition: transform .16s var(--ease), background-color .18s; -webkit-tap-highlight-color: transparent; }
+.share-opt:hover { background: var(--hover); }
+.share-opt:active { transform: scale(.95); }
+.so-ic { width: 44px; height: 44px; border-radius: 50%; display: grid; place-items: center; background: var(--card); box-shadow: var(--shadow); }
+.so-ic .i { width: 19px; height: 19px; }
+.so-ic.wa { background: #25d366; color: #fff; box-shadow: none; }
+@media (max-width: 760px) {
+  .share-grid { grid-template-columns: repeat(auto-fit, minmax(58px, 1fr)); gap: 6px; }
+  .share-opt { padding: 10px 2px 9px; font-size: 11.5px; border-radius: 16px; }
+  .so-ic { width: 40px; height: 40px; }
+}

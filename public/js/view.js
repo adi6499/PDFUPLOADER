@@ -3,7 +3,7 @@
 import { icon } from '/vendor/icons.js';
 import { pdfjs, PDF_OPTS, fmtSize } from './pdfkit.js';
 import * as M from './motion.js';
-import { esc, ui, contactHtml, share, qrSheet, blankCover } from './site.js';
+import { esc, ui, contactHtml, shareSheet, qrSheet, blankCover } from './site.js';
 import { bindImage } from './particles.js';
 
 const $ = (s, el = document) => el.querySelector(s);
@@ -33,8 +33,8 @@ function othersHtml() {
 }
 
 function wireCommon(title, link) {
-  ui(() => { const s = $('#shareTop'); s.hidden = false; s.innerHTML = icon('share-2'); s.addEventListener('click', () => share(title, link)); });
-  ui(() => $('#shareBtn').addEventListener('click', (e) => { M.bump(e.currentTarget.querySelector('.i'), 1.25); share(title, link); }));
+  ui(() => { const s = $('#shareTop'); s.hidden = false; s.innerHTML = icon('share-2'); s.addEventListener('click', (e) => shareSheet({ link, title, from: e.currentTarget })); });
+  ui(() => $('#shareBtn').addEventListener('click', (e) => { M.bump(e.currentTarget.querySelector('.i'), 1.25); shareSheet({ link, title, from: e.currentTarget }); }));
   ui(() => $('#qrBtn').addEventListener('click', () => qrSheet({ link, title })));
 }
 
