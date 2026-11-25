@@ -11,9 +11,10 @@ printed on visiting cards. Customers scan it and see the PDF. The QR codes hold 
   program (no extra packages, no database) from `github.com/adi6499/PDFUPLOADER`.
 - Uploaded PDFs live in a **data folder outside the website folder**, so no update or sync can delete them.
 
-## 0. Choose the address
+## 0. The address
 
-Suggested: **`docs.jinharsh.com`**. Confirm with Jinesh before going further; it is printed on every card.
+**`docs.jinharsh.com`** (confirmed by Jinesh on 25 Nov 2026). It is printed inside every QR code, so it must
+keep working for as long as the visiting cards are in use.
 Add a DNS **A record** `docs` → `159.89.94.209`.
 
 ## 1. Node.js
