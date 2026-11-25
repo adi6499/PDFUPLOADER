@@ -1,4 +1,4 @@
-# Jinharsh Docs
+# Jinharsh Catalogues (catalog.jinharsh.com)
 
 Upload a PDF (catalogue, flyer, price list) and it gets its own **QR code that never changes**.
 Print that QR on visiting cards, flyers, boxes, anywhere. When a newer PDF comes out, press
@@ -20,12 +20,16 @@ The QR code holds only that link, never the PDF itself. So:
 The one thing that must never change is the website address itself (`publicUrl` below).
 Set it once, before printing anything.
 
-## Two screens
+## The pages
 
-| Screen | Address | Who |
+| Page | Address | Who |
 |---|---|---|
-| Documents (upload, QR codes, replace, archive) | `/` | the Jinharsh team |
-| Scan page (cover, Read now, Download, Share, contact buttons) | `/c/<code>` | customers who scan |
+| All catalogues, brand filters, search, a QR for each | `/` | everyone |
+| One catalogue: cover, Read now, Download, Share, QR, more catalogues | `/c/<code>` | everyone (this is what a QR opens) |
+| Team: upload, QR codes for printing, replace, edit details, archive | `/team` | the Jinharsh team |
+
+Links from the old catalog.jinharsh.com hub keep working: `/?cat=<name>` opens `/c/<name>`.
+`npm run import-hub` brings the old hub's catalogues across with the same names (they wait for their PDF).
 
 ## Run it on this computer
 
@@ -41,7 +45,7 @@ npm run password   (sets or changes the team password; needed on the real websit
 
 ## Going live
 
-On the company aaPanel server, step by step: [deploy/SERVER-SETUP.md](deploy/SERVER-SETUP.md).
+On the company aaPanel server at catalog.jinharsh.com, step by step: [deploy/SERVER-SETUP.md](deploy/SERVER-SETUP.md).
 On a real address the team page stays locked until a team password is set with `npm run password`
 (on this computer, with no password, it is open: nobody else can reach it).
 
@@ -54,6 +58,12 @@ project → redeploy. Free limits: 1 GB of files, 10 GB of downloads a month; wh
 the storage for the month, it never charges. Trial QR codes point to the vercel.app address: **never print them**.
 In the trial the team page is open to anyone with the address, and opens are not counted.
 `npm run test:trial` checks the trial storage rules with a pretend store.
+
+## On the office Wi-Fi (trying it out)
+
+In `config.local.json` on this computer: `"host": "0.0.0.0"`, `"publicUrl": "http://<this PC's Wi-Fi address>:8180"`,
+`"teamOpen": true`. Then phones on the same Wi-Fi open that address and scan its QR codes. Never print these codes:
+the address changes when the PC or the Wi-Fi changes. `teamOpen` lets anyone on that Wi-Fi upload or delete.
 
 ## Settings
 

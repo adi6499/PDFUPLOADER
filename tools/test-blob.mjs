@@ -39,7 +39,7 @@ const browserUpload = (pathname, buf) => fakeApi.put(pathname, buf, { addRandomS
 const pdf = (w) => Buffer.from(`%PDF-1.4\n% ${w}\n1 0 obj << /Type /Catalog >> endobj\ntrailer << /Root 1 0 R >>\n%%EOF\n`, 'latin1');
 
 const TOKEN = 'vercel_blob_rw_fakestore_' + 'x'.repeat(30);
-const config = { STORAGE: 'blob', TRIAL: true, PRINTABLE: false, LOOPBACK: false, PUBLIC_URL: 'https://pdf-trial.vercel.app', DATA_DIR: data };
+const config = { STORAGE: 'blob', TRIAL: true, PRINTABLE: false, LOOPBACK: false, TEAM_OPEN: false, PUBLIC_URL: 'https://pdf-trial.vercel.app', DATA_DIR: data };
 async function serve(token = TOKEN) {
   const app = await createApp({ config, blobApi: fakeApi, blobToken: token, fetch: fakeFetch });
   const srv = http.createServer(app.handle);

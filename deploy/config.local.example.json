@@ -1,6 +1,6 @@
 {
-  "publicUrl": "https://docs.jinharsh.com",
-  "dataDir": "/www/jinharsh-docs-data",
+  "publicUrl": "https://catalog.jinharsh.com",
+  "dataDir": "/www/jinharsh-catalogues-data",
   "host": "127.0.0.1",
   "port": 8180,
   "trustProxy": true

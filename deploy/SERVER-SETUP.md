@@ -1,21 +1,21 @@
-# Jinharsh Docs: putting it on the company server
+# Jinharsh Catalogues: putting it on catalog.jinharsh.com
 
-For whoever looks after the aaPanel server (159.89.94.209). About 20 minutes, once.
+For whoever looks after the aaPanel server (159.89.94.209). About 30 minutes, once.
 
-**What this is:** a small website. The team uploads PDFs (catalogues, flyers); each PDF gets a QR code that is
-printed on visiting cards. Customers scan it and see the PDF. The QR codes hold the web address, so
-**the address chosen here must never change** once cards are printed.
+**What this is:** the catalogue site. The team uploads PDFs (catalogues, flyers) in the browser; each gets a QR code
+that is printed on visiting cards, posters and stands. Customers scan it and read or download the PDF.
+It **replaces the old catalogue hub** on catalog.jinharsh.com (the one-page hub that reads `hub/catalogs.json`):
 
-**Important differences from the other jinharsh sites:**
-- It is **not** a static site, so it does **not** go in `mitulv4u/jinharsh-subsites`. It is a small Node.js
-  program (no extra packages, no database) from `github.com/adi6499/PDFUPLOADER`.
-- Uploaded PDFs live in a **data folder outside the website folder**, so no update or sync can delete them.
+- every old hub link keeps working: `catalog.jinharsh.com/?cat=timken-srb` opens the same catalogue,
+  so any QR already printed from the old hub stays good;
+- the old hub's 10 catalogues are brought across with the same names (step 5);
+- the team no longer copies PDFs into `hub/pdfs/` or edits `catalogs.json`: they upload at `catalog.jinharsh.com/team`.
 
-## 0. The address
-
-**`docs.jinharsh.com`** (confirmed by Jinesh on 25 Nov 2026). It is printed inside every QR code, so it must
-keep working for as long as the visiting cards are in use.
-Add a DNS **A record** `docs` → `159.89.94.209`.
+**Good to know:**
+- It is a small Node.js program (no extra packages, no database) from `github.com/adi6499/PDFUPLOADER` (public).
+  It is **not** a static site, so it does **not** go in `mitulv4u/jinharsh-subsites`.
+- The program and its uploaded PDFs live in folders **outside** `/www/wwwroot`, so no sync or update can delete them.
+- The address `catalog.jinharsh.com` is printed inside every QR code: it must keep working for as long as cards exist.
 
 ## 1. Node.js
 
@@ -25,18 +25,16 @@ Check in the terminal: `node -v` shows v20 or higher.
 ## 2. Get the program
 
 ```bash
-cd /www/wwwroot
-git clone https://github.com/adi6499/PDFUPLOADER.git docs.jinharsh.com
-cd docs.jinharsh.com
+git clone https://github.com/adi6499/PDFUPLOADER.git /www/jinharsh-catalogues
+cd /www/jinharsh-catalogues
 ```
 Nothing to install: the libraries are already inside `public/vendor`.
-(If the GitHub repository is private, ask Adesh to add you, or use a deploy key.)
 
-## 3. The data folder (outside the website)
+## 3. The data folder
 
 ```bash
-mkdir -p /www/jinharsh-docs-data
-chown -R www:www /www/jinharsh-docs-data      # the same user that will run Node
+mkdir -p /www/jinharsh-catalogues-data
+chown -R www:www /www/jinharsh-catalogues /www/jinharsh-catalogues-data   # the user that will run Node
 ```
 
 ## 4. Settings for this server
@@ -47,8 +45,8 @@ cp deploy/config.local.example.json config.local.json
 `config.local.json` (not in git) should say:
 ```json
 {
-  "publicUrl": "https://docs.jinharsh.com",
-  "dataDir": "/www/jinharsh-docs-data",
+  "publicUrl": "https://catalog.jinharsh.com",
+  "dataDir": "/www/jinharsh-catalogues-data",
   "host": "127.0.0.1",
   "port": 8180,
   "trustProxy": true
@@ -56,63 +54,78 @@ cp deploy/config.local.example.json config.local.json
 ```
 `publicUrl` is the address inside every QR code. Set it once. Never change it after cards are printed.
 
-## 5. Start it (keeps running, restarts by itself after a reboot)
+## 5. Bring the old hub's catalogues across (once, before the first start)
 
-**Either** aaPanel → **Website → Node project → Add Node project**:
-project folder `/www/wwwroot/docs.jinharsh.com`, run command `node server/server.mjs`, port `8180`,
-user `www`, domain `docs.jinharsh.com`. aaPanel then makes the nginx link for you.
+```bash
+npm run import-hub
+```
+It adds the 10 catalogues from `deploy/hub-catalogs.json` with the same names (`timken-srb`, `groz-lubrication-tools`, ...).
+Each shows "waiting for its PDF" until the team uploads it; the three that linked to Timken / Lovejoy's own PDFs
+keep offering those until then. (If someone added more entries to the server's `hub/catalogs.json` since 25 Nov 2026,
+run `npm run import-hub -- /www/wwwroot/catalog.jinharsh.com/hub/catalogs.json` as well: existing names are skipped.)
 
-**Or** with PM2 in the terminal:
+## 6. Start it (keeps running, restarts by itself after a reboot)
+
 ```bash
 pm2 start deploy/ecosystem.config.cjs
 pm2 save
 pm2 startup        # run the line it prints, once
 ```
-and create the website in aaPanel with `deploy/nginx-docs.jinharsh.com.conf` as its config.
+Check: `curl http://127.0.0.1:8180/api/health` shows `{"ok":true,...}`.
 
-## 6. Two nginx settings that matter (aaPanel → the site → Config)
+## 7. Point catalog.jinharsh.com at the program
 
-```nginx
-client_max_body_size 160m;     # PDFs up to 150 MB; nginx's default would refuse anything over 1 MB
-proxy_request_buffering off;   # the progress bar in the app shows the real upload
-proxy_read_timeout 900s;       # big PDFs on slow phone connections
-proxy_send_timeout 900s;
+First keep a copy of the old hub, just in case:
+```bash
+mkdir -p /www/backup && cp -a /www/wwwroot/catalog.jinharsh.com /www/backup/catalog-hub-2026-11
 ```
-Also `proxy_set_header Host $host;` and `proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;`
-(the sample file has all of these).
+Then aaPanel → **Website** → `catalog.jinharsh.com` → **Reverse proxy** → add one: target URL `http://127.0.0.1:8180`,
+send domain `$host`. Keep its existing SSL certificate and "Force HTTPS".
 
-## 7. HTTPS
+Two settings matter, whichever web server the site uses (the old hub was served by **Apache**):
 
-aaPanel → the site → **SSL** → **Let's Encrypt** → apply → switch on **Force HTTPS**.
+**Apache** (aaPanel → the site → Config), inside the `<VirtualHost *:443>` block:
+```apache
+ProxyPreserveHost On
+ProxyPass        / http://127.0.0.1:8180/ timeout=900
+ProxyPassReverse / http://127.0.0.1:8180/
+RequestHeader set X-Forwarded-Proto "https"
+LimitRequestBody 167772160
+```
+**nginx**: see `deploy/nginx-catalog.jinharsh.com.conf` (`client_max_body_size 160m`, `proxy_request_buffering off`,
+`proxy_read_timeout 900s`).
+
+Without these, PDFs bigger than the web server's default limit are refused, or big uploads time out on phones.
 
 ## 8. Who may upload
 
-The customer page (`/c/...`) is always open. The team page (`/`) is where PDFs are uploaded, replaced and deleted.
-On a real address that page **stays locked until a team password is set**, so strangers can't change the PDFs.
+The catalogue pages (`/` and `/c/...`) are always open. The team page (`/team`) is where PDFs are uploaded, replaced and
+deleted. On the real address it **stays locked until a team password is set**, so strangers can't change the PDFs.
 When Jinesh decides to open it for the team:
 ```bash
-cd /www/wwwroot/docs.jinharsh.com
+cd /www/jinharsh-catalogues
 npm run password          # type it twice; stored only as a scrambled hash in the data folder
 ```
 No restart needed. Running it again later changes the password and signs everyone out.
 
 ## 9. Check
 
-- `https://docs.jinharsh.com/api/health` shows `{"ok":true,...}`
-- `https://docs.jinharsh.com/` shows the team page (or the sign-in page)
-- Upload a small PDF, scan its QR with a phone, it opens.
-- `pm2 logs jinharsh-docs` (or the aaPanel Node project log) shows no errors.
+- `https://catalog.jinharsh.com/` shows all catalogues
+- `https://catalog.jinharsh.com/?cat=timken-srb` opens the Timken catalogue (an old hub link)
+- `https://catalog.jinharsh.com/team` shows the sign-in page (or the team page once signed in)
+- Upload a small PDF on `/team`, scan its QR with a phone: it opens.
+- `pm2 logs jinharsh-docs` shows no errors.
 
 ## 10. Backups
 
-Everything uploaded is in `/www/jinharsh-docs-data` (`db.json` = the list, `docs/` = every PDF version).
-aaPanel → **Cron** → **Backup directory** → `/www/jinharsh-docs-data`, daily, keep 14.
+Everything uploaded is in `/www/jinharsh-catalogues-data` (`db.json` = the list, `docs/` = every PDF version).
+aaPanel → **Cron** → **Backup directory** → `/www/jinharsh-catalogues-data`, daily, keep 14.
 
 ## 11. Updating the program later
 
 ```bash
-cd /www/wwwroot/docs.jinharsh.com
+cd /www/jinharsh-catalogues
 git pull
-pm2 restart jinharsh-docs      # or restart the Node project in aaPanel
+pm2 restart jinharsh-docs
 ```
 The data folder is never touched by an update.

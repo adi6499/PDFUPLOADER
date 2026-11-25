@@ -25,6 +25,13 @@ const istDay = (d = new Date()) => d.toLocaleDateString('en-CA', { timeZone: 'As
 export function cleanTitle(t) {
   return String(t ?? '').replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 140);
 }
+export function cleanNote(t) {
+  return String(t ?? '').replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 300);
+}
+// only ordinary web links (never javascript: and the like)
+export function cleanUrl(u) {
+  try { const x = new URL(String(u ?? '').trim()); return x.protocol === 'https:' || x.protocol === 'http:' ? x.href.slice(0, 500) : ''; } catch { return ''; }
+}
 export function cleanFileName(n) {
   const base = String(n ?? '').split(/[\\/]/).pop().replace(/[\u0000-\u001f\u007f"<>|:*?]/g, '').replace(/\s+/g, ' ').trim();
   const s = base.slice(0, 120) || 'document.pdf';
@@ -114,7 +121,8 @@ export class Store {
     const extra = await this.placeFile(code, 1, input);
     const t = nowIso();
     const doc = {
-      code, title: cleanTitle(title) || cleanFileName(name).replace(/\.pdf$/i, ''), note: '',
+      code, title: cleanTitle(title) || cleanFileName(name).replace(/\.pdf$/i, ''),
+      brand: cleanTitle(input.brand).slice(0, 60), category: cleanTitle(input.category).slice(0, 60), note: cleanNote(input.note), sourceUrl: '',
       status: 'live', createdAt: t, updatedAt: t, current: 1,
       versions: [{ v: 1, name: cleanFileName(name), size, pages: pages || null, uploadedAt: t, cover: null, ...extra }],
       scans: 0, lastScanAt: null, scanDays: {},
@@ -124,7 +132,23 @@ export class Store {
     return doc;
   }
 
-  nextVersion(doc) { return Math.max(...doc.versions.map(x => x.v)) + 1; }
+  // A catalogue that has its link (and QR) but no PDF yet: its scan page says "coming soon",
+  // or opens the maker's own copy (sourceUrl) until our PDF is uploaded. Used for the old hub's catalogues.
+  async createWaiting({ code, title, brand, category, note, sourceUrl }) {
+    const c = this.checkCode(code);
+    if (!c.ok) return null;
+    const t = nowIso();
+    const doc = {
+      code: c.code, title: cleanTitle(title) || c.code, brand: cleanTitle(brand).slice(0, 60), category: cleanTitle(category).slice(0, 60),
+      note: cleanNote(note), sourceUrl: cleanUrl(sourceUrl), status: 'live', createdAt: t, updatedAt: t, current: 0, versions: [],
+      scans: 0, lastScanAt: null, scanDays: {},
+    };
+    this.db.docs.push(doc);
+    await this.save();
+    return doc;
+  }
+
+  nextVersion(doc) { return doc.versions.length ? Math.max(...doc.versions.map(x => x.v)) + 1 : 1; }
 
   async addVersion(doc, input) {
     const { size, name, pages } = input;
@@ -148,7 +172,10 @@ export class Store {
 
   async update(doc, patch) {
     if (patch.title !== undefined) { const t = cleanTitle(patch.title); if (t) doc.title = t; }
-    if (patch.note !== undefined) doc.note = cleanTitle(patch.note);
+    if (patch.note !== undefined) doc.note = cleanNote(patch.note);
+    if (patch.brand !== undefined) doc.brand = cleanTitle(patch.brand).slice(0, 60);
+    if (patch.category !== undefined) doc.category = cleanTitle(patch.category).slice(0, 60);
+    if (patch.sourceUrl !== undefined) doc.sourceUrl = cleanUrl(patch.sourceUrl);
     if (patch.status === 'live' || patch.status === 'archived') doc.status = patch.status;
     if (patch.current !== undefined) {
       const v = Number(patch.current);

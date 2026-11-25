@@ -38,7 +38,7 @@ async function readJsonBody(req, max = 64 * 1024) { return JSON.parse((await rea
 // overrides (for tests): { config: {...}, blobApi, blobToken, fetch, handleUpload }
 export async function createApp(overrides = {}) {
   const C = { ...loadConfig(), ...(overrides.config || {}) };
-  const { cfg, PUBLIC_URL, DATA_DIR, MAX_UPLOAD, TRUST_PROXY, PRINTABLE, LOOPBACK, STORAGE, TRIAL } = C;
+  const { cfg, PUBLIC_URL, DATA_DIR, MAX_UPLOAD, TRUST_PROXY, PRINTABLE, LOOPBACK, STORAGE, TRIAL, TEAM_OPEN } = C;
   const SITE = readJson(join(ROOT, 'site.json'));
   const VERSION = readJson(join(ROOT, 'package.json')).version || '0';
   const BLOB = STORAGE === 'blob';
@@ -58,7 +58,7 @@ export async function createApp(overrides = {}) {
   //  - with a team password set: only people who signed in with it
   //  - with no password: a trial copy, or a preview on this computer (nobody else can reach it);
   //    on the real company address the team screen stays locked until a password is set (npm run password)
-  const openAccess = () => !auth.passwordSet && (TRIAL || (!PRINTABLE && LOOPBACK));
+  const openAccess = () => !auth.passwordSet && (TRIAL || TEAM_OPEN || (!PRINTABLE && LOOPBACK));
   const isTeam = (req) => openAccess() || auth.checkToken(readCookie(req, COOKIE));
   const clientIp = (req) => (TRUST_PROXY && (String(req.headers['x-forwarded-for'] || '').split(',')[0].trim() || req.headers['x-real-ip'])) || req.socket?.remoteAddress || '?';
   const base = (req) => PUBLIC_URL || `https://${req.headers['x-forwarded-host'] || req.headers.host}`;
@@ -76,10 +76,12 @@ export async function createApp(overrides = {}) {
   ].join('; ');
 
   function publicDoc(doc) {
+    const basics = { code: doc.code, title: doc.title, note: doc.note || '', brand: doc.brand || '', category: doc.category || '', status: doc.status };
     const v = doc.versions.find((x) => x.v === doc.current) || doc.versions[doc.versions.length - 1];
+    if (!v) return { ...basics, waiting: true, sourceUrl: doc.sourceUrl || '', updatedAt: doc.updatedAt, cover: null };
     const file = BLOB ? v.url : `/f/${doc.code}/${v.v}/${encodeURIComponent(v.name)}`;
     return {
-      code: doc.code, title: doc.title, note: doc.note, status: doc.status, updatedAt: v.uploadedAt,
+      ...basics, updatedAt: v.uploadedAt,
       version: v.v, pages: v.pages, size: v.size, name: v.name,
       file, download: BLOB ? v.url + '?download=1' : file + '?dl=1',
       cover: v.cover ? (BLOB ? v.cover.url : `/cover/${doc.code}/${v.v}.${v.cover.ext}`) : null,
@@ -132,9 +134,12 @@ export async function createApp(overrides = {}) {
     const doc = store.get(code);
     const B = base(req);
     let state, meta;
+    // the other catalogues, for the "More catalogues" list under each one
+    const others = store.list().filter((d) => d.status === 'live' && d.code !== code).map(publicDoc).filter((p) => !p.waiting)
+      .slice(0, 24).map((p) => ({ code: p.code, title: p.title, brand: p.brand, cover: p.cover, pages: p.pages }));
     if (doc && doc.status === 'live') {
       const p = publicDoc(doc);
-      state = { status: 'live', doc: p, countsScans: !BLOB };
+      state = { status: p.waiting ? 'waiting' : 'live', doc: p, countsScans: !BLOB, others };
       const desc = [p.pages ? p.pages + ' pages' : null, 'PDF', SITE.company?.short || 'Jinharsh'].filter(Boolean).join(' · ');
       const img = p.cover ? (p.cover.startsWith('http') ? p.cover : B + p.cover) : '';
       meta = [
@@ -150,10 +155,10 @@ export async function createApp(overrides = {}) {
         TRIAL ? `<meta name="robots" content="noindex">` : '',
       ].join('\n  ');
     } else {
-      state = { status: doc ? 'archived' : store.isRetired(code) ? 'retired' : 'missing', doc: doc ? { title: doc.title, code: doc.code } : null };
+      state = { status: doc ? 'archived' : store.isRetired(code) ? 'retired' : 'missing', doc: doc ? { title: doc.title, code: doc.code } : null, others };
       meta = `<title>${esc(SITE.company?.short || 'Jinharsh')}</title>\n  <meta name="robots" content="noindex">`;
     }
-    const data = JSON.stringify({ ...state, site: SITE }).replace(/</g, '\\u003c');
+    const data = JSON.stringify({ ...state, site: SITE, publicUrl: B }).replace(/</g, '\\u003c');
     const html = viewTemplate.replace('<!--META-->', meta).replace('<!--DATA-->', `<script type="application/json" id="boot">${data}</script>`);
     send(res, doc ? 200 : 404, html, { 'Content-Type': 'text/html; charset=utf-8', 'Content-Security-Policy': CSP, 'Cache-Control': 'no-cache' });
   }
@@ -227,6 +232,12 @@ export async function createApp(overrides = {}) {
     }
     if (parts[1] === 'health') return send(res, 200, { ok: true, version: VERSION, storage: STORAGE, storageReady: storageReady() });
 
+    // public: every live catalogue, for the front page
+    if (parts[1] === 'catalogs' && m === 'GET') {
+      const list = store.list().filter((d) => d.status === 'live').map(publicDoc);
+      return send(res, 200, { catalogs: list, publicUrl: base(req), site: SITE }, { 'Cache-Control': 'public, max-age=30' });
+    }
+
     if (m !== 'GET' && m !== 'HEAD' && !sameOrigin(req)) { req.resume(); return fail(res, 403, 'Not allowed from another website.'); }
 
     if (parts[1] === 'login' && m === 'POST') {
@@ -279,12 +290,12 @@ export async function createApp(overrides = {}) {
           if (!code) { req.resume(); return fail(res, 400, 'Missing link name.'); }
           const up = await takeBlobUpload(req, res, code, 1); if (!up) return;
           const b = up.body;
-          const doc = await store.create({ title: b.title, code, size: up.size, name: b.name, pages: num(b.pages), url: up.url, pathname: up.pathname });
+          const doc = await store.create({ title: b.title, brand: b.brand, category: b.category, code, size: up.size, name: b.name, pages: num(b.pages), url: up.url, pathname: up.pathname });
           return send(res, 201, teamDoc(req, doc));
         }
         const up = await takeUpload(req, res); if (!up) return;
         if (code && store.taken(code)) { await fs.rm(up.tmp, { force: true }); return fail(res, 409, 'That name was just taken by another upload. Choose another.'); }
-        const doc = await store.create({ title: q.get('title'), code, tmp: up.tmp, size: up.size, name: q.get('name'), pages: num(q.get('pages')) });
+        const doc = await store.create({ title: q.get('title'), brand: q.get('brand'), category: q.get('category'), code, tmp: up.tmp, size: up.size, name: q.get('name'), pages: num(q.get('pages')) });
         return send(res, 201, teamDoc(req, doc));
       }
       return fail(res, 405, 'Not allowed');
@@ -359,6 +370,7 @@ export async function createApp(overrides = {}) {
         const dl = url.searchParams.has('dl');
         if (parts[2] === 'latest') {
           const p = publicDoc(doc);
+          if (p.waiting) return p.sourceUrl ? redirect(res, p.sourceUrl) : fail(res, 404, 'This catalogue has no PDF yet.');
           return redirect(res, dl ? p.download : p.file);
         }
         const v = num(parts[2]);
@@ -380,15 +392,24 @@ export async function createApp(overrides = {}) {
       }
 
       // a private test folder, only ever on this computer
-      if (parts[0] === '__samples' && !PRINTABLE && !TRIAL && existsSync(join(ROOT, 'samples'))) {
+      const fromHere = ['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(req.socket?.remoteAddress);
+      if (parts[0] === '__samples' && !PRINTABLE && !TRIAL && fromHere && existsSync(join(ROOT, 'samples'))) {
         const full = resolve(ROOT, 'samples', decodeURIComponent(parts.slice(1).join('/')));
         if (!full.startsWith(join(ROOT, 'samples') + sep)) return fail(res, 404, 'Not found');
         return await sendFile(req, res, full, 'application/pdf');
       }
 
       if (req.method !== 'GET' && req.method !== 'HEAD') return fail(res, 405, 'Not allowed');
-      if (path === '/' || path === '/index.html') return await serveStatic(req, res, isTeam(req) ? '/index.html' : '/login.html');
-      if (path === '/login.html') return redirect(res, '/');
+      // the front page: every catalogue. Links from the old catalog.jinharsh.com hub keep working:
+      //   /?cat=<id>  -> that catalogue's page        /?qr=1 -> the front page (each card has its QR)
+      if (path === '/' || path === '/index.html') {
+        const cat = url.searchParams.get('cat');
+        if (cat && /^[A-Za-z0-9-]{1,40}$/.test(cat)) return redirect(res, '/c/' + cat.toLowerCase());
+        return await serveStatic(req, res, '/index.html');
+      }
+      // the team screen
+      if (path === '/team' || path === '/team/' || path === '/team.html') return await serveStatic(req, res, isTeam(req) ? '/team.html' : '/login.html');
+      if (path === '/login.html') return redirect(res, '/team');
       return await serveStatic(req, res, path);
     } catch (e) {
       console.error(new Date().toISOString(), req.method, req.url, e);
@@ -399,6 +420,7 @@ export async function createApp(overrides = {}) {
 
   const describeAccess = () => auth.passwordSet ? 'Team screen: password protected.'
     : TRIAL ? 'Team screen: open (TRIAL copy: anyone with the address can upload).'
+    : TEAM_OPEN ? 'Team screen: open to everyone who can reach this address (teamOpen; no password set).'
     : openAccess() ? 'Team screen: open (preview on this computer only; set a password with: npm run password)'
     : 'Team screen: LOCKED until a team password is set (npm run password)';
 

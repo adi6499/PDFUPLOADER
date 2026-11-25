@@ -5,6 +5,7 @@ import * as API from './api.js';
 import { qrSvg, qrSvgFile, qrPng, saveBlob } from './qr.js';
 import { inspectPdf, fmtSize } from './pdfkit.js';
 import * as M from './motion.js';
+import { blankCover } from './site.js';
 
 const $ = (s, el = document) => el.querySelector(s);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -47,6 +48,7 @@ async function start() {
     $('#dropIcon').outerHTML = icon('upload', 'bob');
     $('#uploadBtn').innerHTML = icon('upload') + 'Upload PDF';
     $('#settingsBtn').innerHTML = icon('settings');
+    $('#siteBtn').innerHTML = icon('globe');
     paintThemeBtn();
   });
   wire();
@@ -72,7 +74,7 @@ function offline(why) {
     <p>In Vercel, open the project <span class="mono">pdf</span> → <b>Storage</b> → <b>Create</b> → <b>Blob</b> → connect it to this project, then redeploy. After that, uploads work here.</p>`
     : `<b>This page is not connected to the Jinharsh Docs program, so nothing can be uploaded here.</b>
     <p>It was opened from <span class="mono">${esc(here)}</span>, which only shows the page. Open <span class="mono">http://localhost:8180</span> on this computer
-    (start it with <span class="mono">npm start</span> in the JINHARSH-DOCS folder), or <span class="mono">https://docs.jinharsh.com</span> once it is online.</p>`;
+    (start it with <span class="mono">npm start</span> in the JINHARSH-DOCS folder), or <span class="mono">https://catalog.jinharsh.com</span> once it is online.</p>`;
   $('#answer').outerHTML = `<section class="ju-card notice-card"><div class="notice warn" style="margin:0">${icon('circle-alert')}<div>${text}</div></div></section>`;
   $('#tiles').innerHTML = '';
   $('#list').innerHTML = `<div class="empty"><div class="art">${icon('circle-alert')}</div><h3>Not connected</h3><p>Your documents and their QR codes show up here when the page is opened from the program.</p></div>`;
@@ -99,24 +101,25 @@ function renderWarn() {
   if (S.printable) { w.hidden = true; return; }
   w.hidden = false;
   w.innerHTML = icon('circle-alert') + (S.trial
-    ? `<div><b>Trial copy: do not print these QR codes.</b><p>They point to <span class="mono">${esc(S.publicUrl)}</span>, this trial copy. The real codes will use <span class="mono">docs.jinharsh.com</span> once it is online. In the trial, anyone with this address can upload or delete, and opens are not counted.</p></div>`
-    : `<div><b>Preview only: do not print these QR codes yet.</b><p>They point to <span class="mono">${esc(S.publicUrl)}</span>, which works only on this computer. Once the site is online at its real address, every code becomes final and you can print it.</p></div>`);
+    ? `<div><b>Trial copy: do not print these QR codes.</b><p>They point to <span class="mono">${esc(S.publicUrl)}</span>, this trial copy. The real codes will use <span class="mono">catalog.jinharsh.com</span> once it is online. In the trial, anyone with this address can upload or delete, and opens are not counted.</p></div>`
+    : `<div><b>Preview only: do not print these QR codes yet.</b><p>They point to <span class="mono">${esc(S.publicUrl)}</span>, which works only ${/^https?:\/\/(localhost|127\.)/.test(S.publicUrl) ? 'on this computer' : 'for phones and computers on the same Wi-Fi as this computer'}. Once the site is online at catalog.jinharsh.com, every code becomes final and you can print it.</p></div>`);
 }
 
 function renderAnswer() {
   const live = S.docs.filter((d) => d.status === 'live');
+  const waitingN = live.filter((d) => d.live.waiting).length;
   const total = S.docs.reduce((a, d) => a + (d.scans || 0), 0);
   const last = S.docs.map((d) => d.lastScanAt).filter(Boolean).sort().pop();
   const big = $('#bigFigure');
   if (!S.docs.length) { big.innerHTML = `Nothing yet<small>Upload a PDF to make your first QR code</small>`; return; }
-  const sub = total ? `Opened ${plural(total, 'time', 'times')} · last ${ago(last)}` : 'No one has scanned a code yet';
+  const sub = (waitingN ? `${waitingN} waiting for a PDF · ` : '') + (!S.countsScans ? 'Opens are not counted in the trial' : total ? `Opened ${plural(total, 'time', 'times')} · last ${ago(last)}` : 'No one has scanned a code yet');
   const n = big.querySelector('.n');
   if (n) {
     M.roll(n, String(live.length));
-    big.querySelector('.word').textContent = live.length === 1 ? 'document' : 'documents';
+    big.querySelector('.word').textContent = live.length === 1 ? 'catalogue' : 'catalogues';
     big.querySelector('small').textContent = sub;
   } else {
-    big.innerHTML = `${rollNum(live.length)} <span class="word">${live.length === 1 ? 'document' : 'documents'}</span> live<small>${sub}</small>`;
+    big.innerHTML = `${rollNum(live.length)} <span class="word">${live.length === 1 ? 'catalogue' : 'catalogues'}</span> live<small>${sub}</small>`;
   }
 }
 
@@ -124,11 +127,11 @@ function renderTiles() {
   const live = S.docs.filter((d) => d.status === 'live');
   const arch = S.docs.filter((d) => d.status === 'archived');
   const month = S.docs.reduce((a, d) => a + opensIn(d, 30), 0);
-  const fresh = live.filter((d) => Date.now() - new Date(d.updatedAt) < 30 * 86400000);
+  const waiting = live.filter((d) => d.live.waiting);
   const tiles = [
-    ['live', live.length, 'Live', 'people can open these'],
-    ['opens', month, 'Opens', 'last 30 days, most first'],
-    ['fresh', fresh.length, 'Updated', 'in the last 30 days'],
+    ['live', live.length, 'Catalogues', 'live on the site'],
+    ['waiting', waiting.length, 'Waiting for PDF', 'link works, PDF missing'],
+    ['opens', month, 'Opens', S.countsScans ? 'last 30 days, most first' : 'not counted in the trial'],
     ['archived', arch.length, 'Archived', 'hidden from scans'],
   ];
   const box = $('#tiles');
@@ -149,15 +152,16 @@ function visibleDocs() {
   let list = S.docs.slice();
   if (S.filter === 'archived') list = list.filter((d) => d.status === 'archived');
   else list = list.filter((d) => d.status === 'live');
-  if (S.filter === 'fresh') list = list.filter((d) => Date.now() - new Date(d.updatedAt) < 30 * 86400000);
+  if (S.filter === 'waiting') list = list.filter((d) => d.live.waiting);
   if (S.filter === 'opens') list.sort((a, b) => opensIn(b, 30) - opensIn(a, 30) || (b.scans || 0) - (a.scans || 0));
+  else list.sort((a, b) => (a.live.waiting === b.live.waiting ? 0 : a.live.waiting ? 1 : -1)); // with a PDF first
   const q = S.query.trim().toLowerCase();
-  if (q) list = list.filter((d) => d.title.toLowerCase().includes(q) || d.code.includes(q) || d.versions.some((v) => v.name.toLowerCase().includes(q)));
+  if (q) list = list.filter((d) => [d.title, d.code, d.brand, d.category, d.note].join(' ').toLowerCase().includes(q) || d.versions.some((v) => v.name.toLowerCase().includes(q)));
   return list;
 }
 
 function renderList() {
-  const titles = { live: 'Live documents', archived: 'Archived', opens: 'Most opened', fresh: 'Updated lately' };
+  const titles = { live: 'Catalogues', archived: 'Archived', opens: 'Most opened', waiting: 'Waiting for a PDF' };
   $('#listTitle').textContent = titles[S.filter] || 'Documents';
   const box = $('#list');
   const list = visibleDocs();
@@ -176,8 +180,9 @@ function renderList() {
 
 function rowHtml(d) {
   const L = d.live, open = S.open === d.code;
-  const cover = L.cover ? `<img src="${L.cover}" alt="" loading="lazy" decoding="async">` : icon('file-text');
-  const bits = [`<span class="code">/c/${esc(d.code)}</span>`, L.pages ? plural(L.pages, 'page', 'pages') : null, fmtSize(L.size)].filter(Boolean).join(' · ');
+  const cover = L.cover ? `<img src="${esc(L.cover)}" alt="" loading="lazy" decoding="async">` : L.waiting ? blankCover(d) : icon('file-text');
+  const bits = [d.brand ? esc(d.brand) : null, `<span class="code">/c/${esc(d.code)}</span>`,
+    L.waiting ? '<span class="wait-tag">Waiting for the PDF</span>' : null, L.pages ? plural(L.pages, 'page', 'pages') : null, L.waiting ? null : fmtSize(L.size)].filter(Boolean).join(' · ');
   return `<div class="doc${open ? ' open' : ''}" data-key="${esc(d.code)}" data-code="${esc(d.code)}">
     <div class="ju-row" role="button" tabindex="0" aria-expanded="${open}" data-act="toggle">
       <div class="thumb">${cover}</div>
@@ -204,10 +209,12 @@ function detailHtml(d) {
   return `<div class="detail">
     <div class="qr-col">
       <div class="qr-tile big-qr">${QR(d.link, d.title)}</div>
-      <div class="lock"${S.printable ? '' : ' style="color:var(--warn)"'}>${icon(S.printable ? 'lock' : 'circle-alert')}${S.printable ? 'Permanent. This QR never changes.' : S.trial ? 'Trial code. Do not print.' : 'Preview code. Final once the site is online.'}</div>
+      <div class="lock"${S.printable ? '' : ' style="color:var(--warn)"'}>${icon(S.printable ? 'lock' : 'circle-alert')}${S.printable ? 'Permanent. This QR never changes.' : S.trial ? 'Trial code. Do not print.' : 'Preview code. Final once catalog.jinharsh.com is online.'}</div>
     </div>
     <div class="info-col">
       ${archived ? `<div class="notice warn" style="margin:0">${icon('archive')}<div><b>Archived.</b><p>Anyone who scans this QR sees “no longer available” and your contact details. Bring it back any time.</p></div></div>` : ''}
+      ${d.live.waiting && !archived ? `<div class="notice warn" style="margin:0">${icon('circle-alert')}<div><b>No PDF yet.</b><p>The link and QR already work: people see ${d.sourceUrl ? 'a button to the maker’s own copy' : '“coming soon” and your contact details'}. Upload the PDF and it shows here instead, same QR.</p>
+        <p style="margin-top:10px"><button class="ju-btn primary sm" type="button" data-act="replace">${icon('upload')}Upload the PDF</button></p></div></div>` : ''}
       <div class="linkline"><a href="/c/${esc(d.code)}?preview=1" target="_blank" rel="noopener">${esc(shortLink(d.link))}</a><button class="ju-icon" type="button" data-act="copy" aria-label="Copy link" title="Copy link">${icon('copy')}</button></div>
       <div class="btns">
         <button class="ju-btn primary sm" type="button" data-act="svg">${icon('download')}QR for printing (SVG)</button>
@@ -216,8 +223,8 @@ function detailHtml(d) {
       </div>
       <div class="btns">
         <a class="ju-btn sm" href="/c/${esc(d.code)}?preview=1" target="_blank" rel="noopener">${icon('eye')}Open page</a>
-        <button class="ju-btn sm" type="button" data-act="replace">${icon('refresh-cw')}Replace PDF</button>
-        <button class="ju-btn sm" type="button" data-act="rename">${icon('pencil')}Rename</button>
+        ${d.live.waiting ? '' : `<button class="ju-btn sm" type="button" data-act="replace">${icon('refresh-cw')}Replace PDF</button>`}
+        <button class="ju-btn sm" type="button" data-act="details">${icon('pencil')}Edit details</button>
         ${archived
           ? `<button class="ju-btn sm" type="button" data-act="restore">${icon('archive-restore')}Bring back</button><button class="ju-btn sm ghost" type="button" data-act="delete">${icon('trash-2')}Delete</button>`
           : `<button class="ju-btn sm ghost" type="button" data-act="archive">${icon('archive')}Archive</button>`}
@@ -227,8 +234,8 @@ function detailHtml(d) {
         <div class="num"><b>${nf(counts.reduce((a, b) => a + b, 0))}</b><small>last 14 days</small></div>
         <div class="spark" aria-hidden="true">${bars}</div>
       </div>
-      <div class="section-label">Versions · the QR always opens the one marked “Showing”</div>
-      <div class="vers">${vers}</div>
+      ${d.versions.length ? `<div class="section-label">Versions · the QR always opens the one marked “Showing”</div>
+      <div class="vers">${vers}</div>` : ''}
     </div>
   </div>`;
 }
@@ -318,6 +325,11 @@ function uploadOne(file, idx, count) {
         <div><div class="cover-box" id="coverBox">${icon('file-text')}</div></div>
         <div>
           <label class="field"><span>Name people will see</span><input class="ju-inp" id="fTitle" value="" maxlength="140" autofocus autocomplete="off"></label>
+          ${brandLists()}
+          <div class="two">
+            <label class="field"><span>Brand</span><input class="ju-inp" id="fBrand" maxlength="60" list="dlBrands" placeholder="e.g. Jinharsh" autocomplete="off"></label>
+            <label class="field"><span>Category</span><input class="ju-inp" id="fCat" maxlength="60" list="dlCats" placeholder="e.g. Bearings" autocomplete="off"></label>
+          </div>
           <label class="field"><span>Link</span>
             <div class="prefixed"><span class="pre"><bdi>${esc(linkPrefix())}</bdi></span><input id="fCode" placeholder="${esc(suggested)}" maxlength="32" autocomplete="off" autocapitalize="off" spellcheck="false"></div>
             <small id="fCodeMsg">Leave it as it is, or type a short word like <span class="mono">catalogue</span>. Short links make QR codes that scan more easily. This can't be changed later.</small>
@@ -387,7 +399,7 @@ function uploadOne(file, idx, count) {
       const title = fTitle.value.trim();
       if (!title) { fTitle.focus(); M.shake(fTitle); return; }
       S.busy = true; S.sheetLocked = true;
-      fTitle.disabled = fCode.disabled = true;
+      fTitle.disabled = fCode.disabled = true; $('#fBrand', sh).disabled = $('#fCat', sh).disabled = true;
       const stage = $('#stage', sh);
       M.resize(sh, () => {
         stage.innerHTML = `<div class="progress"><div class="ju-bar"><i id="pBar" style="width:0%"></i></div><div class="row"><span id="pWhat">Reading the PDF…</span><span id="pNum"></span></div></div>`;
@@ -395,7 +407,7 @@ function uploadOne(file, idx, count) {
       try {
         await inspecting;
         $('#pWhat', sh).textContent = 'Uploading…';
-        const doc = await API.createDoc(file, { title, code: chosen || suggested, pages: info?.pages }, (p, a, b) => {
+        const doc = await API.createDoc(file, { title, code: chosen || suggested, pages: info?.pages, brand: $('#fBrand', sh).value, category: $('#fCat', sh).value }, (p, a, b) => {
           $('#pBar', sh).style.width = Math.round(p * 96) + '%';
           $('#pNum', sh).textContent = `${fmtSize(a)} of ${fmtSize(b)}`;
         });
@@ -403,7 +415,7 @@ function uploadOne(file, idx, count) {
         let final = doc;
         if (info?.cover) { try { final = await API.putCover(doc.code, 1, info.cover, info.coverW, info.coverH); } catch {} }
         $('#pBar', sh).style.width = '100%';
-        putDoc(final); S.filter = S.filter === 'archived' ? 'live' : S.filter; S.open = final.code;
+        putDoc(final); S.filter = S.filter === 'archived' || S.filter === 'waiting' ? 'live' : S.filter; S.open = final.code;
         render();
         showDone(sh, final, idx, count, resolveAll);
       } catch (err) {
@@ -471,15 +483,16 @@ async function startReplace(file) {
   if (!d || !file) return;
   if (!(file.type === 'application/pdf' || /\.pdf$/i.test(file.name))) { toast('Only PDF files can be uploaded.'); return; }
   if (file.size > S.maxUploadMB * 1048576) { toast(`This file is too big. The limit is ${S.maxUploadMB} MB.`); return; }
+  const first = !!d.live.waiting;
   const sh = openSheet(`${closeBtn()}
-    <div class="sheet-head"><div class="grow"><h2>Replace the PDF</h2><p>${esc(d.title)}</p></div></div>
+    <div class="sheet-head"><div class="grow"><h2>${first ? 'Upload the PDF' : 'Replace the PDF'}</h2><p>${esc(d.title)}</p></div></div>
     <div class="swap">
-      <div><div class="cover-box" id="oldCover">${d.live.cover ? `<img src="${d.live.cover}" alt="">` : icon('file-text')}</div><div class="cap">Now · v${d.current}</div></div>
+      <div><div class="cover-box" id="oldCover">${d.live.cover ? `<img src="${esc(d.live.cover)}" alt="">` : first ? blankCover(d) : icon('file-text')}</div><div class="cap">${first ? 'Now · no PDF yet' : 'Now · v' + d.current}</div></div>
       <div class="arrow">${icon('arrow-left')}</div>
       <div><div class="cover-box" id="newCover">${icon('file-text')}</div><div class="cap">New · ${esc(file.name)}</div></div>
     </div>
     <div class="notice" style="background:var(--ok-soft);color:var(--ok);margin:14px 0 0">${icon('lock')}<div><b>The QR code and link stay exactly the same.</b><p>Everyone who scans it will see the new file. The current one is kept under Versions, so you can switch back.</p></div></div>
-    <div id="stage"><div class="sheet-foot"><button class="ju-btn ghost" type="button" data-sheet="close">Cancel</button><button class="ju-btn accent" type="button" id="goBtn">${icon('refresh-cw')}Replace PDF</button></div></div>`, { wide: true });
+    <div id="stage"><div class="sheet-foot"><button class="ju-btn ghost" type="button" data-sheet="close">Cancel</button><button class="ju-btn accent" type="button" id="goBtn">${icon(first ? 'upload' : 'refresh-cw')}${first ? 'Upload PDF' : 'Replace PDF'}</button></div></div>`, { wide: true });
   ui(() => { $('.swap .arrow', sh).style.transform = 'scaleX(-1)'; });
   let info = null;
   const inspecting = inspectPdf(file).then((r) => {
@@ -497,7 +510,7 @@ async function startReplace(file) {
     });
     try {
       await inspecting;
-      let doc = await API.addVersion(d.code, file, { pages: info?.pages, nextV: Math.max(...d.versions.map((x) => x.v)) + 1 }, (p, a, b) => {
+      let doc = await API.addVersion(d.code, file, { pages: info?.pages, nextV: d.versions.length ? Math.max(...d.versions.map((x) => x.v)) + 1 : 1 }, (p, a, b) => {
         $('#pBar', sh).style.width = Math.round(p * 96) + '%';
         $('#pNum', sh).textContent = `${fmtSize(a)} of ${fmtSize(b)}`;
       });
@@ -508,7 +521,7 @@ async function startReplace(file) {
       putDoc(doc); S.open = doc.code;
       closeSheet(true); render();
       ui(() => M.bump(rowEl(doc.code)?.querySelector('.thumb'), 1.12));
-      toast('Replaced. Same QR, new PDF.');
+      toast(first ? 'Uploaded. The QR now opens this PDF.' : 'Replaced. Same QR, new PDF.');
     } catch (err) {
       S.sheetLocked = false;
       M.resize(sh, () => {
@@ -546,18 +559,33 @@ function printQR(d) {
   setTimeout(() => window.print(), 80);
 }
 
-function renameSheet(d) {
+function brandLists() {
+  const uniq = (k) => [...new Set(S.docs.map((d) => d[k]).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+  return `<datalist id="dlBrands">${uniq('brand').map((b) => `<option value="${esc(b)}">`).join('')}</datalist>
+    <datalist id="dlCats">${uniq('category').map((b) => `<option value="${esc(b)}">`).join('')}</datalist>`;
+}
+
+function detailsSheet(d) {
   const sh = openSheet(`${closeBtn()}
-    <div class="sheet-head"><div class="grow"><h2>Rename</h2><p>Only the name changes. The QR code stays the same.</p></div></div>
-    <label class="field"><span>Name people will see</span><input class="ju-inp" id="rnTitle" maxlength="140" value="${esc(d.title)}" autofocus autocomplete="off"></label>
-    <div class="sheet-foot"><button class="ju-btn ghost" type="button" data-sheet="close">Cancel</button><button class="ju-btn primary" type="button" id="rnSave">Save</button></div>`);
+    <div class="sheet-head"><div class="grow"><h2>Edit details</h2><p>What people see on the catalogue site. The QR code stays the same.</p></div></div>
+    ${brandLists()}
+    <label class="field"><span>Name</span><input class="ju-inp" id="edTitle" maxlength="140" value="${esc(d.title)}" autofocus autocomplete="off"></label>
+    <div class="two">
+      <label class="field"><span>Brand</span><input class="ju-inp" id="edBrand" maxlength="60" value="${esc(d.brand || '')}" list="dlBrands" placeholder="e.g. Timken" autocomplete="off"></label>
+      <label class="field"><span>Category</span><input class="ju-inp" id="edCat" maxlength="60" value="${esc(d.category || '')}" list="dlCats" placeholder="e.g. Bearings" autocomplete="off"></label>
+    </div>
+    <label class="field"><span>Short description</span><textarea class="ju-inp ta" id="edNote" maxlength="300" rows="3" placeholder="One or two lines shown on the catalogue card">${esc(d.note || '')}</textarea></label>
+    <label class="field"><span>Maker’s own copy (optional)</span><input class="ju-inp" id="edSrc" maxlength="500" value="${esc(d.sourceUrl || '')}" placeholder="https://… (used only while there is no PDF here)" autocomplete="off"></label>
+    <div class="sheet-foot"><button class="ju-btn ghost" type="button" data-sheet="close">Cancel</button><button class="ju-btn primary" type="button" id="edSave">Save</button></div>`);
   const go = async () => {
-    const t = $('#rnTitle', sh).value.trim(); if (!t) { M.shake($('#rnTitle', sh)); return; }
-    try { putDoc(await API.updateDoc(d.code, { title: t })); closeSheet(true); render(); toast('Renamed'); }
-    catch (e) { toast(e.message); }
+    const t = $('#edTitle', sh).value.trim(); if (!t) { M.shake($('#edTitle', sh)); return; }
+    try {
+      putDoc(await API.updateDoc(d.code, { title: t, brand: $('#edBrand', sh).value, category: $('#edCat', sh).value, note: $('#edNote', sh).value, sourceUrl: $('#edSrc', sh).value }));
+      closeSheet(true); render(); toast('Saved');
+    } catch (e) { toast(e.message); }
   };
-  $('#rnSave', sh).addEventListener('click', go);
-  $('#rnTitle', sh).addEventListener('keydown', (e) => { if (e.key === 'Enter') go(); });
+  $('#edSave', sh).addEventListener('click', go);
+  $('#edTitle', sh).addEventListener('keydown', (e) => { if (e.key === 'Enter') go(); });
 }
 
 // leaving = the code of a row that will disappear from this list (it slides away first)
@@ -646,7 +674,7 @@ function wire() {
     if (act === 'svg' || act === 'png') { ui(() => M.nudgeDown(el.querySelector('.i'))); return downloadQR(d, act); }
     if (act === 'print') return printQR(d);
     if (act === 'replace') { S.replaceFor = code; $('#replaceInput').click(); return; }
-    if (act === 'rename') return renameSheet(d);
+    if (act === 'details') return detailsSheet(d);
     if (act === 'use-version') {
       const v = Number(el.dataset.v);
       return confirmSheet({

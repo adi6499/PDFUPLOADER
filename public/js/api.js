@@ -38,7 +38,7 @@ function upload(url, file, onProgress) {
       let j = {}; try { j = JSON.parse(x.responseText); } catch {}
       if (x.status === 401) { location.reload(); no(new Error('Please sign in again.')); return; }
       if (x.status >= 200 && x.status < 300) ok(j);
-      else if (!j.error && (x.status === 404 || x.status === 405)) no(new Error('This page is not connected to the Jinharsh Docs program, so the file could not be saved. Open http://localhost:8180 (or docs.jinharsh.com once it is online) and try again.'));
+      else if (!j.error && (x.status === 404 || x.status === 405)) no(new Error('This page is not connected to the Jinharsh Docs program, so the file could not be saved. Open http://localhost:8180 (or catalog.jinharsh.com once it is online) and try again.'));
       else no(new Error(j.error || 'Upload failed (' + x.status + ').'));
     };
     x.onerror = () => no(new Error('The upload stopped. Check the internet connection and try again.'));
@@ -62,12 +62,12 @@ async function toBlobStore(pathname, file, onProgress) {
   }
 }
 
-export async function createDoc(file, { title, code, pages }, onProgress) {
+export async function createDoc(file, { title, code, pages, brand = '', category = '' }, onProgress) {
   if (MODE === 'blob') {
     const b = await toBlobStore(`docs/${code}/v1.pdf`, file, onProgress);
-    return call('POST', '/api/docs?code=' + encodeURIComponent(code), { title, name: file.name, pages, pathname: b.pathname });
+    return call('POST', '/api/docs?code=' + encodeURIComponent(code), { title, brand, category, name: file.name, pages, pathname: b.pathname });
   }
-  const q = new URLSearchParams({ title: title || '', name: file.name, pages: pages || '' });
+  const q = new URLSearchParams({ title: title || '', name: file.name, pages: pages || '', brand, category });
   if (code) q.set('code', code);
   return upload('/api/docs?' + q, file, onProgress);
 }

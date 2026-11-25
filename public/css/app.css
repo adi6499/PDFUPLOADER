@@ -188,7 +188,7 @@
 .rollbox .n { display: inline-block; }
 .bob { animation: bob 1.6s var(--ease) infinite; }
 @keyframes bob { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-7px); } }
-::view-transition-old(root), ::view-transition-new(root) { animation: none; mix-blend-mode: normal; }
+html.vt-theme::view-transition-old(root), html.vt-theme::view-transition-new(root) { animation: none; mix-blend-mode: normal; }
 .ju .ju-btn .i { transition: transform .2s var(--ease); }
 .ju-overlay .ju-sheet { animation-duration: var(--sp-gentle-ms, .34s); animation-timing-function: var(--sp-gentle, var(--spring)); }
 .thumb { transition: transform .2s var(--ease); }
@@ -242,3 +242,35 @@
   .answer .big { font-size: 34px; }
   .swap .cover-box { max-width: 110px; }
 }
+
+/* ---------- a catalogue with no cover picture yet: its brand on a calm tint ---------- */
+.blank-cover { --h: 28; display: flex; flex-direction: column; justify-content: space-between; padding: 14% 12%; text-align: left;
+  background: hsl(var(--h) 45% 93%); color: hsl(var(--h) 45% 24%); box-shadow: inset 0 0 0 1px hsl(var(--h) 30% 85%); overflow: hidden; }
+.dark .blank-cover { background: hsl(var(--h) 25% 18%); color: hsl(var(--h) 60% 82%); box-shadow: inset 0 0 0 1px hsl(var(--h) 20% 26%); }
+.blank-cover .bc-brand { font-weight: 800; font-size: clamp(14px, 2.4vw, 26px); letter-spacing: -.02em; line-height: 1.05; }
+.blank-cover .bc-title { font-size: clamp(9px, 1vw, 12px); font-weight: 600; opacity: .75; line-height: 1.3; display: -webkit-box; -webkit-line-clamp: 4; -webkit-box-orient: vertical; overflow: hidden; }
+.blank-cover.big .bc-brand { font-size: clamp(24px, 4vw, 40px); }
+.blank-cover.big .bc-title { font-size: 14px; }
+.thumb .blank-cover { width: 100%; height: 100%; padding: 6px; }
+.thumb .blank-cover .bc-brand { font-size: 9px; }
+.thumb .blank-cover .bc-title { display: none; }
+
+/* ---------- the public QR window ---------- */
+.ju .ju-sheet.qr-sheet { max-width: 420px; text-align: center; }
+.qr-sheet .qr-big { width: min(280px, 72vw); margin: 6px auto 16px; }
+.qr-sheet h2 { margin: 0 0 4px; font-size: 19px; letter-spacing: -.015em; }
+.qr-sheet .qr-link { margin: 0 0 18px; color: var(--muted); font-size: 13px; word-break: break-all; }
+.qr-sheet .btns { justify-content: center; }
+.qr-sheet .qr-hint { margin: 14px 0 0; }
+
+/* ---------- moving between pages: the cover glides from the list into the catalogue (Chrome, Edge, Safari 18) ---------- */
+@media (prefers-reduced-motion: no-preference) {
+  @view-transition { navigation: auto; }
+  ::view-transition-group(*) { animation-duration: .45s; animation-timing-function: cubic-bezier(.2, .8, .2, 1); }
+}
+
+/* ---------- form bits: two fields side by side, a description box, the "waiting" label ---------- */
+.two { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.ju .ju-inp.ta { height: auto; min-height: 84px; padding: 11px 14px; line-height: 1.45; resize: vertical; width: 100%; }
+.wait-tag { color: var(--warn); font-weight: 650; }
+@media (max-width: 520px) { .two { grid-template-columns: 1fr; gap: 0; } }

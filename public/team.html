@@ -1,0 +1,75 @@
+<!doctype html>
+<html class="ju" lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Team · Jinharsh Catalogues</title>
+  <meta name="description" content="Upload a PDF and get a QR code that never changes.">
+  <meta name="theme-color" content="#f4f4f6" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#0a0a0a" media="(prefers-color-scheme: dark)">
+  <meta name="robots" content="noindex">
+  <link rel="icon" href="/assets/favicon-32.png" sizes="32x32">
+  <link rel="apple-touch-icon" href="/assets/apple-touch-icon.png">
+  <link rel="preload" href="/vendor/fonts/Geist-Variable.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/vendor/jinharsh-ui.css">
+  <link rel="stylesheet" href="/css/app.css">
+  <script src="/vendor/jinharsh-ui.js"></script>
+</head>
+<body>
+  <header class="ju-top ju-glass" data-ju-lens="flat">
+    <div class="top-in">
+      <a class="brand" href="/team">
+        <img src="/assets/mark.png" alt="" width="38" height="38">
+        <span><b>Jinharsh Catalogues</b><small>Team · QR codes that never change</small></span>
+      </a>
+      <a class="ju-icon" id="siteBtn" href="/" target="_blank" rel="noopener" aria-label="Open the catalogue site" title="Open the catalogue site"></a>
+      <button class="ju-icon" id="themeBtn" type="button" aria-label="Light or dark"></button>
+      <button class="ju-icon" id="settingsBtn" type="button" aria-label="Settings"></button>
+    </div>
+  </header>
+
+  <main class="wrap" id="main">
+    <div class="ju-enter">
+      <section class="intro ju-head">
+        <h1>Catalogues</h1>
+        <p>Upload a PDF and it gets its own QR code. The QR never changes, so print it on visiting cards, posters and stands. Replace the PDF whenever you like: everyone who scans sees the newest one.</p>
+      </section>
+
+      <div class="notice warn" id="previewWarn" hidden></div>
+
+      <section class="ju-hero answer" id="answer">
+        <div>
+          <div class="eyebrow">Your library</div>
+          <div class="big" id="bigFigure">&nbsp;<small>&nbsp;</small></div>
+        </div>
+        <div class="actions">
+          <button class="ju-btn accent" id="uploadBtn" type="button"></button>
+          <div class="hint">or drop PDFs anywhere on this page</div>
+        </div>
+      </section>
+
+      <section class="ju-tiles tiles" id="tiles" aria-label="Filters"></section>
+
+      <section class="ju-card list-card">
+        <div class="list-head">
+          <h2 id="listTitle">Catalogues</h2>
+          <label class="searchbox">
+            <span class="sr">Search</span>
+            <span id="searchIcon"></span>
+            <input class="ju-inp" id="search" type="search" placeholder="Search by name or code" autocomplete="off">
+          </label>
+        </div>
+        <div id="list" aria-live="polite"></div>
+      </section>
+    </div>
+  </main>
+
+  <input type="file" id="fileInput" accept="application/pdf,.pdf" multiple hidden>
+  <input type="file" id="replaceInput" accept="application/pdf,.pdf" hidden>
+  <div class="ju-overlay" id="overlay" hidden><div class="ju-sheet" id="sheet" role="dialog" aria-modal="true"></div></div>
+  <div class="drop-veil" id="dropVeil" hidden><div class="card"><span id="dropIcon"></span><b>Drop to upload</b><span class="ju-muted">PDF files only</span></div></div>
+  <div id="printArea"></div>
+
+  <script type="module" src="/js/library.js"></script>
+</body>
+</html>

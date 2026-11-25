@@ -100,3 +100,30 @@
 /* Dark mode only: the PDF pages are white paper, so fully clear glass would put white text on white.
    These two bars use the kit's own "frosted" strength here (30), nothing else changes. */
 .ju.dark .viewer .ju-glass { --g: .3; --gp: 30%; }
+
+/* ---------- brand label, QR button, "More catalogues" ---------- */
+.brand-pill { display: inline-flex; align-items: center; padding: 3px 10px; border-radius: 999px; background: var(--ink); color: var(--ink-text);
+  font-size: 11.5px; font-weight: 700; letter-spacing: .02em; text-transform: none; }
+.v-text .ju-eyebrow .brand-pill { margin-right: 2px; }
+.ju .v-actions .ju-btn.icon-only { width: 50px; padding: 0; }
+.v-actions .soon { height: 50px; padding: 0 20px; font-size: 14px; }
+.v-cover .blank-cover.big { aspect-ratio: 210 / 297; border-radius: 14px; box-shadow: 0 0 0 1px rgba(0,0,0,.05), 0 34px 70px -18px rgba(20,22,28,.34);
+  animation: cover-in var(--sp-gentle-ms, 1s) var(--sp-gentle, var(--spring)); }
+.more-cats { margin: 28px 0 8px; }
+.mc-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+.mc-head h2 { margin: 0; font-size: 24px; letter-spacing: -.025em; }
+.mc-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; }
+.mc-card { display: flex; flex-direction: column; background: var(--card); border-radius: 20px; box-shadow: var(--shadow); overflow: hidden; text-decoration: none; color: inherit;
+  transition: transform .35s var(--sp-smooth, var(--ease)); -webkit-tap-highlight-color: transparent; }
+.mc-card:hover { transform: translateY(-3px); }
+.mc-card:active { transform: scale(.98); }
+.mc-cover { aspect-ratio: 4 / 3; background: var(--bg); display: grid; place-items: end center; padding: 12px 12px 0; overflow: hidden; }
+.mc-cover img { max-width: 76%; height: 100%; object-fit: cover; object-position: top; border-radius: 6px 6px 0 0; background: #fff; box-shadow: 0 10px 24px -10px rgba(20,22,28,.3); }
+.mc-cover .blank-cover { width: 76%; height: 100%; border-radius: 6px 6px 0 0; }
+.mc-text { padding: 10px 12px 12px; display: flex; flex-direction: column; gap: 3px; }
+.mc-brand { font-size: 11px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }
+.mc-text b { font-size: 13.5px; font-weight: 650; line-height: 1.3; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+@media (max-width: 760px) {
+  .mc-grid { grid-template-columns: 1fr 1fr; gap: 10px; }
+  .v-actions .soon { flex: 1 1 100%; justify-content: center; }
+}

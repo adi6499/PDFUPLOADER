@@ -30,5 +30,7 @@ export function loadConfig() {
     PRINTABLE = !TRIAL && !(h === 'localhost' || /^127\./.test(h) || h === '[::1]' || /^10\./.test(h) || /^192\.168\./.test(h) || /^172\.(1[6-9]|2\d|3[01])\./.test(h) || h.endsWith('.local'));
   } catch {}
   const LOOPBACK = HOST === '127.0.0.1' || HOST === 'localhost' || HOST === '::1';
-  return { cfg, ON_VERCEL, PORT, HOST, PUBLIC_URL, DATA_DIR, MAX_UPLOAD, TRUST_PROXY, STORAGE, TRIAL, PRINTABLE, LOOPBACK };
+  // team page open with no password (for trying it out on the office Wi-Fi); a team password, once set, still wins
+  const TEAM_OPEN = String(env.TEAM_OPEN ?? cfg.teamOpen ?? 'false') === 'true';
+  return { cfg, ON_VERCEL, PORT, HOST, PUBLIC_URL, DATA_DIR, MAX_UPLOAD, TRUST_PROXY, STORAGE, TRIAL, PRINTABLE, LOOPBACK, TEAM_OPEN };
 }

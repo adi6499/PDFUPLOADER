@@ -1,84 +1,100 @@
-// The scan page. The server puts the document's details into the page itself (id="boot"),
-// so the cover and title show at once; the PDF pages are then drawn one by one as they come near the screen.
+// A catalogue's own page: what a scanned QR code opens. The server puts the catalogue's details into the page
+// itself (id="boot"), so the cover and title show at once; the PDF pages are then drawn as they come near the screen.
 import { icon } from '/vendor/icons.js';
 import { pdfjs, PDF_OPTS, fmtSize } from './pdfkit.js';
 import * as M from './motion.js';
+import { esc, ui, contactHtml, share, qrSheet, blankCover } from './site.js';
 
 const $ = (s, el = document) => el.querySelector(s);
-const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
-const ui = (fn) => { try { fn(); } catch (e) {} };
-const toast = (t) => ui(() => JUI.toast(t));
 
 let BOOT = {};
 try { BOOT = JSON.parse($('#boot').textContent); } catch {}
 const SITE = BOOT.site || {};
-const C = SITE.contact || {};
 const D = BOOT.doc;
 const app = $('#app');
 const preview = new URLSearchParams(location.search).has('preview');
+const PUBLIC = (BOOT.publicUrl || location.origin).replace(/\/$/, '');
+const linkOf = (code) => `${PUBLIC}/c/${code}`;
 
-ui(() => {
-  if (C.website) { $('#brand').href = C.website; $('#brand').target = '_blank'; }
-  if (SITE.company?.short) $('#brand b').textContent = SITE.company.short;
-});
+ui(() => { $('#brand b').textContent = SITE.company?.short || 'Jinharsh'; $('#brand small').textContent = 'Catalogues'; });
 
-function contactHtml(title) {
-  const items = [];
-  const subj = title ? `About: ${title}` : 'Enquiry';
-  (C.phones || []).slice(0, 1).forEach((p) => items.push(`<a class="c-item" href="tel:${esc(p.dial)}"><span class="c-ic">${icon('phone')}</span><span><b>Call</b><small>${esc(p.display)}</small></span></a>`));
-  if (C.whatsapp) items.push(`<a class="c-item" href="https://wa.me/${esc(C.whatsapp)}?text=${encodeURIComponent('Hello Jinharsh, ' + (title ? 'I have a question about “' + title + '”.' : 'I have a question.'))}" target="_blank" rel="noopener"><span class="c-ic">${icon('message-circle')}</span><span><b>WhatsApp</b><small>Chat with us</small></span></a>`);
-  if (C.email) items.push(`<a class="c-item" href="mailto:${esc(C.email)}?subject=${encodeURIComponent(subj)}"><span class="c-ic">${icon('mail')}</span><span><b>Email</b><small>${esc(C.email)}</small></span></a>`);
-  if (C.website) items.push(`<a class="c-item" href="${esc(C.website)}" target="_blank" rel="noopener"><span class="c-ic">${icon('globe')}</span><span><b>Website</b><small>${esc(C.website.replace(/^https?:\/\//, ''))}</small></span></a>`);
-  const phones = (C.phones || []).map((p) => `<a href="tel:${esc(p.dial)}">${esc(p.display)}</a>`).join(' · ');
-  return `<section class="ju-card contact">
-    <h2>Questions? Talk to us.</h2>
-    <p>${esc(SITE.company?.name || '')}${SITE.company?.tagline ? ' · ' + esc(SITE.company.tagline) : ''}</p>
-    <div class="c-grid">${items.join('')}</div>
-    <p class="addr">${C.address ? esc(C.address) + '<br>' : ''}${phones}</p>
-  </section>
-  <footer class="v-foot">© ${new Date().getFullYear()} ${esc(SITE.company?.name || '')}</footer>`;
+// the other catalogues, under every page (like the menu of the old catalogue hub)
+function othersHtml() {
+  const list = (BOOT.others || []).slice(0, 8);
+  if (!list.length) return '';
+  return `<section class="more-cats">
+    <div class="mc-head"><h2>More catalogues</h2><a class="ju-btn sm ghost" href="/">${icon('book-open')}See all</a></div>
+    <div class="mc-grid">${list.map((o) => `<a class="mc-card" href="/c/${esc(o.code)}">
+      <div class="mc-cover">${o.cover ? `<img src="${esc(o.cover)}" alt="" loading="lazy" decoding="async" style="view-transition-name:cover-${esc(o.code)}">` : blankCover(o)}</div>
+      <div class="mc-text">${o.brand ? `<span class="mc-brand">${esc(o.brand)}</span>` : ''}<b>${esc(o.title)}</b></div>
+    </a>`).join('')}</div>
+  </section>`;
 }
 
-function shareUrl() { return location.origin + location.pathname; }
-async function share(title) {
-  const url = shareUrl();
-  if (navigator.share) {
-    try { await navigator.share({ title, text: title, url }); return; } catch (e) { if (e && e.name === 'AbortError') return; }
-  }
-  try { await navigator.clipboard.writeText(url); toast('Link copied'); } catch { window.prompt('Copy this link:', url); }
+function wireCommon(title, link) {
+  ui(() => { const s = $('#shareTop'); s.hidden = false; s.innerHTML = icon('share-2'); s.addEventListener('click', () => share(title, link)); });
+  ui(() => $('#shareBtn').addEventListener('click', (e) => { M.bump(e.currentTarget.querySelector('.i'), 1.25); share(title, link); }));
+  ui(() => $('#qrBtn').addEventListener('click', () => qrSheet({ link, title })));
 }
 
 // ---------- not available ----------
-if (BOOT.status !== 'live' || !D) {
+if (!D || (BOOT.status !== 'live' && BOOT.status !== 'waiting')) {
   const t = {
-    archived: ['This document is no longer available', 'It may have been replaced by a newer one. Contact us and we will send you the latest.'],
-    retired: ['This document is no longer available', 'It may have been replaced by a newer one. Contact us and we will send you the latest.'],
-    missing: ['Nothing is linked to this code', 'Please check the link, or contact us and we will help you find what you were looking for.'],
+    archived: ['This catalogue is no longer available', 'It may have been replaced by a newer one. Contact us and we will send you the latest.'],
+    retired: ['This catalogue is no longer available', 'It may have been replaced by a newer one. Contact us and we will send you the latest.'],
+    missing: ['Nothing is linked to this code', 'Please check the link, or have a look at all our catalogues.'],
   }[BOOT.status] || ['Something went wrong', 'Please try again in a moment.'];
-  app.innerHTML = `<div class="ju-enter"><section class="ju-card gone"><div class="art">${icon('circle-alert')}</div><h1>${t[0]}</h1><p>${t[1]}</p></section>${contactHtml(BOOT.doc?.title)}</div>`;
+  app.innerHTML = `<div class="ju-enter"><section class="ju-card gone"><div class="art">${icon('circle-alert')}</div><h1>${t[0]}</h1><p>${t[1]}</p>
+    <p style="margin-top:18px"><a class="ju-btn primary" href="/">${icon('book-open')}See all catalogues</a></p></section>${othersHtml()}${contactHtml(SITE, BOOT.doc?.title)}</div>`;
+} else if (BOOT.status === 'waiting') {
+  showWaiting();
 } else {
   showDoc();
 }
 
-// ---------- the document ----------
+// ---------- a catalogue whose PDF is not uploaded yet ----------
+function showWaiting() {
+  let host = '';
+  try { host = D.sourceUrl ? new URL(D.sourceUrl).hostname.replace(/^www\./, '') : ''; } catch {}
+  app.innerHTML = `
+    <section class="v-hero">
+      <div class="v-cover">${blankCover(D, 'big')}</div>
+      <div class="v-text">
+        <div class="ju-eyebrow">${D.brand ? `<span class="brand-pill">${esc(D.brand)}</span>` : ''}${D.category ? esc(D.category) : 'Catalogue'}</div>
+        <h1>${esc(D.title)}</h1>
+        <p class="sub">${D.note ? esc(D.note) : ''}</p>
+        <div class="v-actions">
+          ${D.sourceUrl ? `<a class="ju-btn accent" href="${esc(D.sourceUrl)}" target="_blank" rel="noopener">${icon('external-link')}Open the PDF (${esc(host)})</a>` : `<span class="ju-pill warn soon">Coming soon: ask us for a copy</span>`}
+          <button class="ju-btn" type="button" id="shareBtn">${icon('share-2')}Share</button>
+          <button class="ju-btn" type="button" id="qrBtn">${icon('qr-code')}QR code</button>
+        </div>
+      </div>
+    </section>
+    ${othersHtml()}
+    ${contactHtml(SITE, D.title)}`;
+  wireCommon(D.title, linkOf(D.code));
+}
+
+// ---------- the catalogue ----------
 function showDoc() {
   const updated = new Date(D.updatedAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' });
   const ratio = D.coverW && D.coverH ? D.coverW / D.coverH : 210 / 297;
   const cover = D.cover
-    ? `<img src="${D.cover}" alt="Cover of ${esc(D.title)}" width="${D.coverW || 720}" height="${D.coverH || 1018}" fetchpriority="high">`
-    : `<div class="blank">${icon('file-text')}</div>`;
+    ? `<img src="${esc(D.cover)}" alt="Cover of ${esc(D.title)}" width="${D.coverW || 720}" height="${D.coverH || 1018}" fetchpriority="high" style="view-transition-name:cover-${esc(D.code)}">`
+    : blankCover(D, 'big');
   const dl = D.download || D.file + '?dl=1';
   app.innerHTML = `
     <section class="v-hero">
       <div class="v-cover">${cover}</div>
       <div class="v-text">
-        <div class="ju-eyebrow">PDF${D.pages ? ' · ' + D.pages + (D.pages === 1 ? ' page' : ' pages') : ''} · ${fmtSize(D.size)}</div>
+        <div class="ju-eyebrow">${D.brand ? `<span class="brand-pill">${esc(D.brand)}</span>` : ''}PDF${D.pages ? ' · ' + D.pages + (D.pages === 1 ? ' page' : ' pages') : ''} · ${fmtSize(D.size)}</div>
         <h1>${esc(D.title)}</h1>
         <p class="sub">${D.note ? esc(D.note) + ' · ' : ''}Updated ${updated}</p>
         <div class="v-actions">
           <button class="ju-btn accent" type="button" id="readBtn">${icon('book-open')}Read now</button>
-          <a class="ju-btn primary" href="${dl}" download="${esc(D.name)}" id="dlBtn">${icon('arrow-down-to-line')}Download</a>
+          <a class="ju-btn primary" href="${esc(dl)}" download="${esc(D.name)}" id="dlBtn">${icon('arrow-down-to-line')}Download</a>
           <button class="ju-btn" type="button" id="shareBtn">${icon('share-2')}Share</button>
+          <button class="ju-btn icon-only" type="button" id="qrBtn" aria-label="QR code" title="QR code">${icon('qr-code')}</button>
         </div>
       </div>
     </section>
@@ -90,29 +106,29 @@ function showDoc() {
         <span class="zoom-val rollbox"><span class="n" id="zVal">100%</span></span>
         <button class="ju-icon" type="button" id="zIn" aria-label="Bigger">${icon('zoom-in')}</button>
         <span class="sep"></span>
-        <a class="ju-icon" href="${dl}" download="${esc(D.name)}" aria-label="Download">${icon('download')}</a>
+        <a class="ju-icon" href="${esc(dl)}" download="${esc(D.name)}" aria-label="Download">${icon('download')}</a>
         <button class="ju-icon" type="button" id="topBtn" aria-label="Back to top">${icon('arrow-up')}</button>
       </div>
       <div class="pages-scroll"><div class="pages" id="pages"></div></div>
     </section>
-    ${contactHtml(D.title)}`;
+    ${othersHtml()}
+    ${contactHtml(SITE, D.title)}`;
 
   // placeholders straight away, so the page doesn't jump while the PDF loads
   const pagesEl = $('#pages');
   const n0 = D.pages || 1;
   let html = '';
   for (let i = 1; i <= n0; i++) {
-    html += `<div class="page" data-n="${i}" style="aspect-ratio:${ratio}">${i === 1 && D.cover ? `<img class="ph" src="${D.cover}" alt="">` : ''}<span class="pno">${i}</span></div>`;
+    html += `<div class="page" data-n="${i}" style="aspect-ratio:${ratio}">${i === 1 && D.cover ? `<img class="ph" src="${esc(D.cover)}" alt="">` : ''}<span class="pno">${i}</span></div>`;
   }
   pagesEl.innerHTML = html;
 
   const read = () => $('#reader').scrollIntoView({ behavior: M.calm() ? 'auto' : 'smooth', block: 'start' });
   $('#readBtn').addEventListener('click', read);
   ui(() => $('.v-cover img').addEventListener('click', read));
-  $('#shareBtn').addEventListener('click', (e) => { M.bump(e.currentTarget.querySelector('.i'), 1.25); share(D.title); });
   document.querySelectorAll('a[download]').forEach((a) => a.addEventListener('click', () => M.nudgeDown(a.querySelector('.i'))));
   $('#topBtn').addEventListener('click', () => window.scrollTo({ top: 0, behavior: 'smooth' }));
-  ui(() => { const s = $('#shareTop'); s.hidden = false; s.innerHTML = icon('share-2'); s.addEventListener('click', () => share(D.title)); });
+  wireCommon(D.title, linkOf(D.code));
 
   // one count per visit (the team's own "Open page" adds ?preview=1 and is not counted)
   if (!preview && BOOT.countsScans !== false) ui(() => {

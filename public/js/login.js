@@ -20,7 +20,7 @@ form.addEventListener('submit', async (e) => {
   try {
     const r = await fetch('/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password: pw.value }) });
     const j = await r.json().catch(() => ({}));
-    if (r.ok) { form.classList.add('signin-ok'); setTimeout(() => location.replace('/'), 260); return; }
+    if (r.ok) { form.classList.add('signin-ok'); setTimeout(() => location.replace('/team'), 260); return; }
     msg.textContent = j.error || 'Could not sign in.';
     pw.select(); shake(form);
   } catch {

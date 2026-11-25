@@ -141,7 +141,10 @@ export function themeSwitch(x, y, apply) {
   if (calm() || !document.startViewTransition) { apply(); return; }
   try {
     const r = Math.hypot(Math.max(x, innerWidth - x), Math.max(y, innerHeight - y));
+    const root = document.documentElement;
+    root.classList.add('vt-theme');
     const t = document.startViewTransition(() => apply());
+    t.finished.finally(() => root.classList.remove('vt-theme'));
     t.ready.then(() => {
       document.documentElement.animate(
         { clipPath: [`circle(0px at ${x}px ${y}px)`, `circle(${r}px at ${x}px ${y}px)`] },
