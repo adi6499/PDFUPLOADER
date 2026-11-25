@@ -10,7 +10,18 @@ import http from 'node:http';
 import { createApp } from './app.mjs';
 
 const { handle, store, C, VERSION, describeAccess } = await createApp();
-const server = http.createServer(handle);
+// Visits from other devices (phones on the office Wi-Fi) are written to the log, so "it doesn't open on my phone"
+// can be told apart from "the phone never reached this computer". Behind the company server's web server every
+// visit comes from this machine itself, so nothing is logged there.
+const LOCAL = new Set(['127.0.0.1', '::1', '::ffff:127.0.0.1']);
+const server = http.createServer((req, res) => {
+  const ip = req.socket.remoteAddress || '';
+  if (!LOCAL.has(ip)) {
+    const t0 = Date.now();
+    res.on('finish', () => console.log(`${new Date().toLocaleTimeString('en-IN')}  visit from ${ip.replace('::ffff:', '')}  ${req.method} ${req.url}  -> ${res.statusCode} (${Date.now() - t0} ms)`));
+  }
+  return handle(req, res);
+});
 server.requestTimeout = 15 * 60 * 1000; // big PDFs on slow connections
 server.listen(C.PORT, C.HOST, () => {
   console.log(`Jinharsh Docs ${VERSION} running at http://${C.HOST === '0.0.0.0' ? 'localhost' : C.HOST}:${C.PORT}`);
