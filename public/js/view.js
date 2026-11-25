@@ -4,7 +4,7 @@ import { icon } from '/vendor/icons.js';
 import { pdfjs, PDF_OPTS, fmtSize } from './pdfkit.js';
 import * as M from './motion.js';
 import { esc, ui, contactHtml, shareSheet, qrSheet, blankCover } from './site.js';
-import { bindImage } from './particles.js';
+import { bindImage, dissolve } from './particles.js';
 
 const $ = (s, el = document) => el.querySelector(s);
 
@@ -173,8 +173,13 @@ function openReader() {
     window.removeEventListener('popstate', onPop);
     document.removeEventListener('keydown', onKey);
     if (!fromBack) { try { history.back(); } catch {} }
+    // the page in the middle of the screen breaks into grains of its own colours
+    const mid = innerHeight / 2;
+    const pageNow = [...ov.querySelectorAll('.page')].find((p) => { const b = p.getBoundingClientRect(); return b.top <= mid && b.bottom >= mid; }) || ov.querySelector('.page');
+    const grains = pageNow ? dissolve(pageNow, { sample: pageNow.querySelector('canvas') || pageNow.querySelector('img'), cols: 56 }) : Promise.resolve();
+    const bar = dissolve(ov.querySelector('.rbar'), { cols: 24 });
     stopReader();
-    M.play(ov, [{ opacity: 1 }, { opacity: 0 }], { duration: 220, easing: 'ease-in' }).then(() => {
+    Promise.all([grains, bar, M.play(ov, [{ opacity: 1 }, { opacity: 0 }], { duration: 520, easing: 'ease-in' })]).then(() => {
       ov.querySelectorAll('canvas').forEach((c) => { c.width = c.height = 0; });
       ov.remove();
       document.body.style.overflow = '';

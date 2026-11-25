@@ -6,7 +6,7 @@ import { qrSvg, qrSvgFile, qrPng, saveBlob } from './qr.js';
 import { inspectPdf, fmtSize } from './pdfkit.js';
 import * as M from './motion.js';
 import { blankCover } from './site.js';
-import { collapseFrom, assemble, enableHoverScatter } from './particles.js';
+import { collapseFrom, assemble, enableHoverScatter, enableButtonParticles, dissolve } from './particles.js';
 import { takeFiles } from './handoff.js';
 
 const $ = (s, el = document) => el.querySelector(s);
@@ -45,7 +45,8 @@ const rollNum = (n) => `<span class="rollbox"><span class="n">${n}</span></span>
 
 // ---------- start ----------
 async function start() {
-  enableHoverScatter(); // big QR codes: the squares scatter away from the mouse
+  enableHoverScatter();    // big QR codes: the grains scatter away from the mouse or finger
+  enableButtonParticles(); // every button press sprays a few grains; download buttons pour them in
   ui(() => {
     $('#searchIcon').outerHTML = icon('search');
     $('#dropIcon').outerHTML = icon('upload', 'bob');
@@ -294,7 +295,9 @@ function closeSheet(force, { quiet = false } = {}) {
   document.body.style.overflow = '';
   if (S.sheetResolve) { const r = S.sheetResolve; S.sheetResolve = null; r('closed'); }
   if (quiet) sh.style.visibility = 'hidden';
-  const anim = quiet ? M.play(ov, [{ opacity: 1 }, { opacity: 0 }], { duration: 240, easing: 'ease-in' }) : M.leave(sh, ov);
+  // closing: the window breaks into grains that drift away while the veil clears
+  const veil = M.play(ov, [{ opacity: 1 }, { opacity: 0 }], { duration: quiet ? 240 : 480, easing: 'ease-in' });
+  const anim = quiet ? veil : Promise.all([dissolve(sh), veil]);
   ov.style.pointerEvents = 'none';
   anim.then(() => {
     ov.style.pointerEvents = '';

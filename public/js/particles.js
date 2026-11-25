@@ -396,3 +396,176 @@ export function bindImage(fromEl, toEl, { cols = 46 } = {}) {
     } catch { reveal(); }
   });
 }
+
+// ---------- small effects on one shared layer: a burst, a pour, a dissolve ----------
+let fx = null;
+function fxAdd(item) {
+  if (!fx) {
+    const L = makeCanvas();
+    L.cv.style.zIndex = '96';
+    fx = { ...L, items: [], raf: 0, guard: 0 };
+  }
+  fx.items.push(item);
+  clearTimeout(fx.guard);
+  fx.guard = setTimeout(fxClear, 4000); // never left on screen, even if the browser pauses drawing
+  if (!fx.raf) fx.raf = requestAnimationFrame(fxFrame);
+}
+function fxClear() { if (!fx) return; cancelAnimationFrame(fx.raf); fx.items.forEach((it) => it.end && it.end()); fx.cv.remove(); fx = null; }
+function fxFrame(now) {
+  if (!fx) return;
+  fx.raf = 0;
+  const { g, cv, dpr } = fx;
+  g.clearRect(0, 0, cv.width, cv.height);
+  fx.items = fx.items.filter((it) => {
+    const alive = it.draw(g, dpr, now);
+    if (!alive && it.end) it.end();
+    return alive;
+  });
+  if (fx.items.length) fx.raf = requestAnimationFrame(fxFrame); else fxClear();
+}
+const dot = (g, dpr, x, y, s, col, a) => {
+  if (s <= 0 || a <= 0) return;
+  g.globalAlpha = a; g.fillStyle = col;
+  const X = Math.round(x * dpr), Y = Math.round(y * dpr);
+  g.fillRect(X, Y, Math.max(1, Math.round((x + s) * dpr) - X), Math.max(1, Math.round((y + s) * dpr) - Y));
+  g.globalAlpha = 1;
+};
+function colourOf(el) {
+  try {
+    const st = getComputedStyle(el);
+    const bg = st.backgroundColor;
+    if (bg && bg !== 'transparent' && !/rgba\(0, 0, 0, 0\)/.test(bg)) return bg;
+    return st.color || 'rgb(17,17,19)';
+  } catch { return 'rgb(17,17,19)'; }
+}
+
+// A little spray of grains from (x, y) that flies out, falls a bit and fades.
+export function burst(x, y, { n = 26, colors = ['rgb(234,88,12)', 'rgb(17,17,19)'] } = {}) {
+  if (calm()) return;
+  const t0 = performance.now();
+  const ps = Array.from({ length: n }, () => {
+    const a = Math.random() * Math.PI * 2, v = 60 + Math.random() * 170; // px per second
+    return { vx: Math.cos(a) * v, vy: Math.sin(a) * v - 60, s: 1.4 + Math.random() * 2.2, life: 420 + Math.random() * 320, col: colors[Math.floor(Math.random() * colors.length)] };
+  });
+  fxAdd({
+    draw(g, dpr, now) {
+      const el = now - t0; let alive = false;
+      for (const p of ps) {
+        const t = el / p.life; if (t >= 1) continue; alive = true;
+        const sec = el / 1000, k = 1 - t;
+        dot(g, dpr, x + p.vx * sec, y + p.vy * sec + 260 * sec * sec, p.s * (0.4 + 0.6 * k), p.col, Math.min(1, k * 1.6));
+      }
+      return alive;
+    },
+  });
+}
+
+// Grains pour from `fromRect` (or from above the button) into `btn`; then the button gives a little bounce.
+export function pour(btn, fromRect = null, { n = 70, colors = ['rgb(17,17,19)', 'rgb(234,88,12)'], onDone } = {}) {
+  if (calm() || !btn) { if (onDone) onDone(); return; }
+  const b = btn.getBoundingClientRect();
+  const t0 = performance.now();
+  const ps = Array.from({ length: n }, () => {
+    let sx, sy;
+    if (fromRect && fromRect.width) { sx = fromRect.left + Math.random() * fromRect.width; sy = fromRect.top + Math.random() * fromRect.height; }
+    else { const a = -Math.PI / 2 + (Math.random() - 0.5) * 2.2, d = 50 + Math.random() * 90; sx = b.left + b.width / 2 + Math.cos(a) * d; sy = b.top + b.height / 2 + Math.sin(a) * d; }
+    return { sx, sy, tx: b.left + b.width * (0.3 + Math.random() * 0.4), ty: b.top + b.height * (0.35 + Math.random() * 0.3),
+      delay: Math.random() * 260, dur: 380 + Math.random() * 260, s: 1.4 + Math.random() * 1.8, col: colors[Math.floor(Math.random() * colors.length)] };
+  });
+  let landed = false;
+  fxAdd({
+    draw(g, dpr, now) {
+      const el = now - t0; let alive = false;
+      for (const p of ps) {
+        const t = clamp01((el - p.delay) / p.dur); if (t >= 1) continue; alive = true;
+        const e = t * t * t; // speeds up as it falls in
+        dot(g, dpr, lerp(p.sx, p.tx, e), lerp(p.sy, p.ty, e), p.s * (1 - 0.5 * t), p.col, el < p.delay ? 0 : 1);
+      }
+      if (!alive && !landed) { landed = true; if (onDone) onDone(); }
+      return alive;
+    },
+    end() { if (!landed) { landed = true; if (onDone) onDone(); } },
+  });
+}
+
+// `el` breaks into grains that drift up and away, sweeping from left to right. It is hidden at once;
+// the promise ends when the grains have gone. `sample` (a canvas or picture) gives the grains their colours.
+export function dissolve(el, { sample = null, cols = 48 } = {}) {
+  return new Promise((resolve) => {
+    try {
+      if (calm() || !el) { resolve(); return; }
+      const r = el.getBoundingClientRect();
+      if (!r.width || !r.height) { resolve(); return; }
+      const rows = Math.max(6, Math.round(cols * r.height / r.width));
+      let px = null;
+      try {
+        if (sample && (sample.tagName === 'CANVAS' || (sample.tagName === 'IMG' && sample.complete && sample.naturalWidth))) {
+          const oc = document.createElement('canvas'); oc.width = cols; oc.height = rows;
+          const og = oc.getContext('2d', { willReadFrequently: true });
+          og.drawImage(sample, 0, 0, cols, rows);
+          px = og.getImageData(0, 0, cols, rows).data;
+        }
+      } catch { px = null; }
+      const surface = colourOf(el);
+      let ink = 'rgb(17,17,19)';
+      try { ink = getComputedStyle(el).color || ink; } catch {}
+      const cw = r.width / cols, ch = r.height / rows;
+      const ps = [];
+      for (let j = 0; j < rows; j++) for (let i = 0; i < cols; i++) {
+        const k = (j * cols + i) * 4;
+        const col = px ? `rgb(${px[k]},${px[k + 1]},${px[k + 2]})` : (Math.random() < 0.04 ? ink : surface);
+        const a = -Math.PI / 2 + (Math.random() - 0.5) * 2.4, v = 40 + Math.random() * 140;
+        ps.push({ x: r.left + i * cw, y: r.top + j * ch, vx: Math.cos(a) * v, vy: Math.sin(a) * v, col,
+          delay: (i / cols) * 220 + Math.random() * 120, life: 420 + Math.random() * 280 });
+      }
+      el.style.visibility = 'hidden';
+      const t0 = performance.now();
+      let done = false;
+      const finish = () => { if (!done) { done = true; resolve(); } };
+      setTimeout(finish, 1400);
+      fxAdd({
+        draw(g, dpr, now) {
+          const el2 = now - t0; let alive = false;
+          for (const p of ps) {
+            const t = (el2 - p.delay) / p.life;
+            if (t >= 1) continue; alive = true;
+            if (t <= 0) { dot(g, dpr, p.x, p.y, Math.max(cw, ch) + 0.6, p.col, 1); continue; } // still part of the window
+            const sec = (el2 - p.delay) / 1000, k = 1 - t;
+            dot(g, dpr, p.x + p.vx * sec, p.y + p.vy * sec, Math.max(1.2, Math.max(cw, ch) * k), p.col, Math.min(1, k * 1.5));
+          }
+          if (!alive) finish();
+          return alive;
+        },
+        end: finish,
+      });
+    } catch { resolve(); }
+  });
+}
+
+// Every button press sprays a few grains; download buttons pour grains in instead.
+let buttonsInstalled = false;
+const DOWNLOAD = 'a[download], [data-dl], [data-png], [data-svg], [data-act="svg"], [data-act="png"]';
+export function enableButtonParticles() {
+  if (buttonsInstalled) return;
+  buttonsInstalled = true;
+  document.addEventListener('click', (e) => {
+    if (calm()) return;
+    const btn = e.target && e.target.closest && e.target.closest('button, .ju-btn, .ju-icon, .share-opt, .c-item, .ju-chip, .ju-tile');
+    if (!btn || btn.disabled) return;
+    try {
+      if (btn.matches(DOWNLOAD)) {
+        // from the QR in the same window, if there is one; else from above the button
+        const holder = btn.closest('.ju-sheet, .detail, .done');
+        const qr = holder ? holder.querySelector('.qr-tile svg') : null;
+        pour(btn, qr ? qr.getBoundingClientRect() : null, { onDone: () => bumpEl(btn) });
+        return;
+      }
+      const b = btn.getBoundingClientRect();
+      const x = e.clientX || b.left + b.width / 2, y = e.clientY || b.top + b.height / 2;
+      burst(x, y, { colors: [colourOf(btn), 'rgb(234,88,12)'] });
+    } catch {}
+  }, { capture: true, passive: true });
+}
+function bumpEl(el) {
+  try { el.animate([{ transform: 'scale(1)' }, { transform: 'scale(1.07)', offset: 0.35 }, { transform: 'scale(1)' }], { duration: 360, easing: 'cubic-bezier(.2,.9,.25,1.1)' }); } catch {}
+}

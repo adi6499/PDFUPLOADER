@@ -2,9 +2,13 @@
 import { icon } from '/vendor/icons.js';
 import { qrSvg, qrSvgFile, qrPng, saveBlob } from './qr.js';
 import * as M from './motion.js';
-import { assemble, enableHoverScatter } from './particles.js';
+import { assemble, enableHoverScatter, enableButtonParticles, dissolve } from './particles.js';
 
-enableHoverScatter(); // big QR codes: the squares scatter away from the mouse
+enableHoverScatter();    // big QR codes: the grains scatter away from the mouse or finger
+enableButtonParticles(); // every button press sprays a few grains; download buttons pour them in
+
+// closing a window: it breaks into grains that drift away while the veil clears
+const dissolveOut = (sheet, ov) => Promise.all([dissolve(sheet), M.play(ov, [{ opacity: 1 }, { opacity: 0 }], { duration: 480, easing: 'ease-in' })]);
 
 export const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 export const ui = (fn) => { try { fn(); } catch (e) {} };
@@ -74,7 +78,7 @@ export function shareSheet({ link, title, from = null }) {
   const close = async () => {
     if (closing) return; closing = true;
     document.removeEventListener('keydown', onKey);
-    await M.leave(sheet, ov);
+    await dissolveOut(sheet, ov);
     ov.remove(); document.body.style.overflow = '';
   };
   const onKey = (e) => { if (e.key === 'Escape') close(); };
@@ -117,7 +121,7 @@ export function qrSheet({ link, title }) {
   const close = async () => {
     if (closing) return; closing = true;
     document.removeEventListener('keydown', onKey);
-    await M.leave(sheet, ov);
+    await dissolveOut(sheet, ov);
     ov.remove(); document.body.style.overflow = '';
   };
   const onKey = (e) => { if (e.key === 'Escape') close(); };
