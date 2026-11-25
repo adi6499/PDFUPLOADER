@@ -188,3 +188,111 @@ export function assemble(tile, link) {
   s.collapse(pts, c.cx, c.cy, c.size, c.svg);
   setTimeout(() => s.into(tile, link), 720);
 }
+
+// ---------- the mouse pushes the squares apart ----------
+// On any big QR that carries data-link="...", the squares near the mouse scatter away from it and spring back home
+// as it moves on or leaves. Only for a mouse (a finger on a phone scrolls the page), never with "reduce motion".
+// The squares always settle back exactly, so the code still scans once the mouse is off it.
+let hoverInstalled = false;
+export function enableHoverScatter() {
+  if (hoverInstalled) return;
+  hoverInstalled = true;
+  document.addEventListener('pointermove', (e) => {
+    if (e.pointerType !== 'mouse' || calm()) return;
+    const tile = e.target && e.target.closest && e.target.closest('.qr-tile[data-link]');
+    if (!tile || tile.__scatter) return;
+    const svg = tile.querySelector('svg');
+    if (!svg || svg.style.visibility === 'hidden') return; // still being assembled by the particles above
+    try { tile.__scatter = scatter(tile, svg, tile.dataset.link, e); }
+    catch {
+      tile.__scatter = null;
+      tile.querySelectorAll(':scope > canvas').forEach((c) => c.remove());
+      const path = svg.querySelector('path'); if (path) path.style.visibility = '';
+    }
+  }, { passive: true });
+}
+
+function scatter(tile, svg, link, firstEvent) {
+  const path = svg.querySelector('path');
+  const r = svg.getBoundingClientRect();
+  const q = makeQR(link, true), margin = 4, k = r.width / (q.n + margin * 2);
+  const parts = [];
+  for (let y = 0; y < q.n; y++) for (let x = 0; x < q.n; x++) if (q.dark(y, x)) {
+    const hx = (x + margin) * k, hy = (y + margin) * k;
+    parts.push({ hx, hy, x: hx, y: hy, vx: 0, vy: 0 });
+  }
+  // a see-through layer exactly over the code; the logo and white card underneath stay as they are
+  if (getComputedStyle(tile).position === 'static') tile.style.position = 'relative';
+  const cv = document.createElement('canvas');
+  cv.setAttribute('aria-hidden', 'true');
+  const dpr = Math.min(2, window.devicePixelRatio || 1);
+  cv.width = Math.round(r.width * dpr); cv.height = Math.round(r.height * dpr);
+  // (an SVG picture has no offsetLeft/offsetTop, so measure it against the tile it sits in)
+  const tb = tile.getBoundingClientRect();
+  const left = r.left - tb.left - tile.clientLeft, top = r.top - tb.top - tile.clientTop;
+  Object.assign(cv.style, { position: 'absolute', left: left + 'px', top: top + 'px', width: r.width + 'px', height: r.height + 'px', pointerEvents: 'none' });
+  tile.appendChild(cv);
+  const g = cv.getContext('2d');
+  g.setTransform(dpr, 0, 0, dpr, 0, 0);
+  if (path) path.style.visibility = 'hidden';
+
+  const R = Math.max(46, k * 8.5);             // how far the mouse reaches
+  const HOLD = 550;                             // after the mouse stops (or leaves), the squares go home
+  const P = { x: -9999, y: -9999, last: 0 };
+  // the mouse is followed on the whole page, so leaving the code never goes unnoticed
+  const onMove = (ev) => {
+    if (ev.pointerType && ev.pointerType !== 'mouse') return;
+    const b = svg.getBoundingClientRect();
+    const over = ev.clientX >= b.left - 8 && ev.clientX <= b.right + 8 && ev.clientY >= b.top - 8 && ev.clientY <= b.bottom + 8;
+    if (!over) { if (P.last) { P.last = 0; wake(); settleSoon(); } return; }
+    P.x = ev.clientX - b.left; P.y = ev.clientY - b.top; P.last = performance.now();
+    wake();
+    clearTimeout(idle); idle = setTimeout(wake, HOLD + 30); // wake once more so the squares start home after a pause
+    settleSoon();
+  };
+  // the timer that always brings the real code back, even if the browser pauses the animation
+  const settleSoon = () => { clearTimeout(hard); hard = setTimeout(() => { if (!stopped && (!P.last || performance.now() - P.last >= HOLD)) stop(); }, HOLD + 1200); };
+  let idle = 0, hard = 0, raf = 0, stopped = false;
+  document.addEventListener('pointermove', onMove, { passive: true });
+  function stop() {
+    if (stopped) return; stopped = true;
+    cancelAnimationFrame(raf); clearTimeout(idle); clearTimeout(hard);
+    document.removeEventListener('pointermove', onMove);
+    cv.remove();
+    if (path) path.style.visibility = '';
+    tile.__scatter = null;
+  }
+  function wake() { if (!raf && !stopped) raf = requestAnimationFrame(step); }
+  function step() {
+    raf = 0;
+    if (!tile.isConnected) { stop(); return; }
+    const pushing = P.last && performance.now() - P.last < HOLD;
+    g.clearRect(-k * 6, -k * 6, r.width + k * 12, r.height + k * 12);
+    let moving = false;
+    for (const p of parts) {
+      if (pushing) {
+        const dx = p.x - P.x, dy = p.y - P.y, d = Math.hypot(dx, dy) || 0.001;
+        if (d < R) { const f = Math.pow(1 - d / R, 2) * k * 0.95; p.vx += (dx / d) * f; p.vy += (dy / d) * f; }
+      }
+      p.vx += (p.hx - p.x) * 0.07; p.vy += (p.hy - p.y) * 0.07;   // the spring that pulls it home
+      p.vx *= 0.8; p.vy *= 0.8;                                  // calm it down
+      p.x += p.vx; p.y += p.vy;
+      let off = Math.hypot(p.x - p.hx, p.y - p.hy);
+      const fast = Math.abs(p.vx) + Math.abs(p.vy) > 0.05;
+      if (fast || (!pushing && off > 0.08)) moving = true;
+      else if (!pushing || off < 0.08) { p.x = p.hx; p.y = p.hy; p.vx = p.vy = 0; off = 0; }
+      const t = Math.min(1, off / (k * 3));                      // pushed squares turn orange, squares at home are black
+      g.fillStyle = t > 0.02 ? colour(1 - t) : 'rgb(17,17,19)';
+      const s = k + 0.35;
+      g.fillRect(p.x, p.y, s, s);
+    }
+    if (!moving) {
+      if (!pushing) stop();       // everything home and the mouse still: the real code takes over again
+      return;                     // pushed but settled: wait for the next movement
+    }
+    raf = requestAnimationFrame(step);
+  }
+  setTimeout(() => stop(), 120000); // never left running
+  onMove(firstEvent);
+  return { stop };
+}

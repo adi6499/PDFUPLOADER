@@ -6,7 +6,7 @@ import { qrSvg, qrSvgFile, qrPng, saveBlob } from './qr.js';
 import { inspectPdf, fmtSize } from './pdfkit.js';
 import * as M from './motion.js';
 import { blankCover } from './site.js';
-import { collapseFrom, assemble } from './particles.js';
+import { collapseFrom, assemble, enableHoverScatter } from './particles.js';
 import { takeFiles } from './handoff.js';
 
 const $ = (s, el = document) => el.querySelector(s);
@@ -45,6 +45,7 @@ const rollNum = (n) => `<span class="rollbox"><span class="n">${n}</span></span>
 
 // ---------- start ----------
 async function start() {
+  enableHoverScatter(); // big QR codes: the squares scatter away from the mouse
   ui(() => {
     $('#searchIcon').outerHTML = icon('search');
     $('#dropIcon').outerHTML = icon('upload', 'bob');
@@ -216,7 +217,7 @@ function detailHtml(d) {
     </div>`).join('');
   return `<div class="detail">
     <div class="qr-col">
-      <div class="qr-tile big-qr">${QR(d.link, d.title)}</div>
+      <div class="qr-tile big-qr" data-link="${esc(d.link)}">${QR(d.link, d.title)}</div>
       <div class="lock"${S.printable ? '' : ' style="color:var(--warn)"'}>${icon(S.printable ? 'lock' : 'circle-alert')}${S.printable ? 'Permanent. This QR never changes.' : S.trial ? 'Trial code. Do not print.' : 'Preview code. Final once catalog.jinharsh.com is online.'}</div>
     </div>
     <div class="info-col">
@@ -450,7 +451,7 @@ function showDone(sh, doc, idx, count, resolveAll, swirl) {
         <div class="tick">${icon('circle-check')}Uploaded</div>
         <h2>Your QR code is ready</h2>
         <p class="sub">${esc(doc.title)}${S.printable ? '' : S.trial ? ' · trial code, do not print' : ' · preview code, print it once the site is online'}</p>
-        <div class="qr-tile" id="doneQr">${QR(doc.link, doc.title)}</div>
+        <div class="qr-tile" id="doneQr" data-link="${esc(doc.link)}">${QR(doc.link, doc.title)}</div>
         <div class="linkline"><a href="/c/${esc(doc.code)}?preview=1" target="_blank" rel="noopener">${esc(shortLink(doc.link))}</a><button class="ju-icon" type="button" data-copy="${esc(doc.link)}" aria-label="Copy link">${icon('copy')}</button></div>
         <div class="btns">
           <button class="ju-btn primary" type="button" data-dl="svg">${icon('download')}QR for printing (SVG)</button>

@@ -2,7 +2,9 @@
 import { icon } from '/vendor/icons.js';
 import { qrSvg, qrSvgFile, qrPng, saveBlob } from './qr.js';
 import * as M from './motion.js';
-import { assemble } from './particles.js';
+import { assemble, enableHoverScatter } from './particles.js';
+
+enableHoverScatter(); // big QR codes: the squares scatter away from the mouse
 
 export const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 export const ui = (fn) => { try { fn(); } catch (e) {} };
@@ -51,7 +53,7 @@ export function qrSheet({ link, title }) {
   const safe = String(title || 'Jinharsh catalogues').replace(/[\\/:*?"<>|]+/g, ' ').trim().slice(0, 90);
   ov.innerHTML = `<div class="ju-sheet qr-sheet" role="dialog" aria-modal="true" aria-label="QR code">
     <button class="ju-icon close-x" type="button" data-x aria-label="Close">${icon('x')}</button>
-    <div class="qr-tile qr-big">${qrSvg(link, { logo: true, title })}</div>
+    <div class="qr-tile qr-big" data-link="${esc(link)}">${qrSvg(link, { logo: true, title })}</div>
     <h2>${esc(title)}</h2>
     <p class="qr-link mono">${esc(shortLink(link))}</p>
     <div class="btns">
