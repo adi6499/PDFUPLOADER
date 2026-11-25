@@ -1,0 +1,17 @@
+{
+  "company": {
+    "name": "Jinharsh Industrial Solutions Private Limited",
+    "short": "Jinharsh",
+    "tagline": "Your complete industrial solutions provider"
+  },
+  "contact": {
+    "phones": [
+      { "label": "Office", "display": "022-409 000 00", "dial": "+912240900000" },
+      { "label": "Mobile", "display": "+91 80001 04000", "dial": "+918000104000" }
+    ],
+    "whatsapp": "918000104000",
+    "email": "crm@jinharsh.com",
+    "website": "https://www.jinharsh.com",
+    "address": "76/78 Nagdevi Street, Ground Floor, Mumbai 400003"
+  }
+}

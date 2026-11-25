@@ -1,0 +1,9 @@
+# libraries (re-made with: npm install, then npm run vendor)
+node_modules/
+# uploaded PDFs, covers and the list of documents - never put these in git
+data/
+# private sample PDFs used for testing on this PC
+samples/
+# local settings for this PC
+config.local.json
+*.log

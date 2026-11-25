@@ -1,0 +1,194 @@
+// The document list and the files on disk.
+//
+// THE ONE RULE: a document's code (the part after /c/ in its link) is given once and never changes,
+// never gets reused, and keeps working for ever. Replacing the PDF adds a new version under the SAME code,
+// so a QR code printed on a visiting card always opens the newest file.
+//
+// Layout on disk:
+//   <dataDir>/db.json                     the list of documents (written safely: temp file, then rename)
+//   <dataDir>/docs/<code>/v1.pdf          every version of every PDF is kept
+//   <dataDir>/docs/<code>/v1.jpg          the cover picture of that version
+//   <dataDir>/tmp/                        uploads land here first, then move into place
+import { promises as fs, createWriteStream } from 'node:fs';
+import { join } from 'node:path';
+import { randomInt, randomUUID } from 'node:crypto';
+
+// No 0/o, 1/i/l: nothing that can be misread from a printed card.
+const ALPHABET = '23456789abcdefghjkmnpqrstuvwxyz';
+const AUTO_LEN = 5;
+export const CODE_RE = /^[a-z0-9](?:[a-z0-9-]{0,30}[a-z0-9])?$/;
+const RESERVED = new Set(['api', 'c', 'f', 'cover', 'vendor', 'js', 'css', 'assets', 'admin', 'new', 'login', 'logout', 'settings', 'help']);
+
+const nowIso = () => new Date().toISOString();
+const istDay = (d = new Date()) => d.toLocaleDateString('en-CA', { timeZone: 'Asia/Kolkata' });
+
+export function cleanTitle(t) {
+  return String(t ?? '').replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 140);
+}
+export function cleanFileName(n) {
+  const base = String(n ?? '').split(/[\\/]/).pop().replace(/[\u0000-\u001f\u007f"<>|:*?]/g, '').replace(/\s+/g, ' ').trim();
+  const s = base.slice(0, 120) || 'document.pdf';
+  return /\.pdf$/i.test(s) ? s : s + '.pdf';
+}
+
+export class Store {
+  constructor(dataDir) {
+    this.dir = dataDir;
+    this.docsDir = join(dataDir, 'docs');
+    this.tmpDir = join(dataDir, 'tmp');
+    this.dbFile = join(dataDir, 'db.json');
+    this.db = { docs: [], retired: [] };
+    this.queue = Promise.resolve();
+    this.scanTimer = null;
+  }
+
+  async load() {
+    await fs.mkdir(this.docsDir, { recursive: true });
+    await fs.mkdir(this.tmpDir, { recursive: true });
+    try {
+      const raw = JSON.parse(await fs.readFile(this.dbFile, 'utf8'));
+      this.db = { docs: Array.isArray(raw.docs) ? raw.docs : [], retired: Array.isArray(raw.retired) ? raw.retired : [] };
+    } catch (e) {
+      if (e.code !== 'ENOENT') throw new Error('db.json could not be read - fix or restore it before starting: ' + e.message);
+    }
+    // leftovers from an upload that was cut off
+    for (const f of await fs.readdir(this.tmpDir)) await fs.rm(join(this.tmpDir, f), { force: true });
+  }
+
+  // every write goes through one queue, so two uploads at once can never overwrite each other's changes
+  save() {
+    this.queue = this.queue.then(async () => {
+      const tmp = this.dbFile + '.' + randomUUID() + '.tmp';
+      await fs.writeFile(tmp, JSON.stringify(this.db, null, 2));
+      await fs.rename(tmp, this.dbFile);
+    });
+    return this.queue;
+  }
+
+  list() { return this.db.docs; }
+  get(code) { return this.db.docs.find(d => d.code === String(code).toLowerCase()) || null; }
+  isRetired(code) { return this.db.retired.includes(String(code).toLowerCase()); }
+  taken(code) { return !!this.get(code) || this.isRetired(code); }
+
+  checkCode(code) {
+    code = String(code ?? '').trim().toLowerCase();
+    if (!code) return { ok: false, reason: 'Type a short name, or leave it empty for an automatic one.' };
+    if (code.length < 3) return { ok: false, reason: 'Use at least 3 letters or numbers.' };
+    if (!CODE_RE.test(code)) return { ok: false, reason: 'Use only small letters, numbers and dashes (no spaces).' };
+    if (RESERVED.has(code)) return { ok: false, reason: 'That word is kept for the website itself. Try another.' };
+    if (this.taken(code)) return { ok: false, reason: 'That name is already used by another QR code.' };
+    return { ok: true, code };
+  }
+
+  newCode() {
+    for (let tries = 0; tries < 1000; tries++) {
+      let c = '';
+      for (let i = 0; i < AUTO_LEN; i++) c += ALPHABET[randomInt(ALPHABET.length)];
+      if (/[a-z]/.test(c) && /[2-9]/.test(c) && !this.taken(c)) return c;
+    }
+    throw new Error('Could not find a free code');
+  }
+
+  tmpPath() { return join(this.tmpDir, randomUUID() + '.part'); }
+  filePath(code, v) { return join(this.docsDir, code, 'v' + v + '.pdf'); }
+  coverPath(code, v, ext) { return join(this.docsDir, code, 'v' + v + '.' + ext); }
+
+  async create({ title, code, tmp, size, name, pages }) {
+    code = code ? code : this.newCode();
+    const dir = join(this.docsDir, code);
+    await fs.mkdir(dir, { recursive: true });
+    await fs.rename(tmp, this.filePath(code, 1));
+    const t = nowIso();
+    const doc = {
+      code, title: cleanTitle(title) || cleanFileName(name).replace(/\.pdf$/i, ''), note: '',
+      status: 'live', createdAt: t, updatedAt: t, current: 1,
+      versions: [{ v: 1, name: cleanFileName(name), size, pages: pages || null, uploadedAt: t, cover: null }],
+      scans: 0, lastScanAt: null, scanDays: {},
+    };
+    this.db.docs.unshift(doc);
+    await this.save();
+    return doc;
+  }
+
+  async addVersion(doc, { tmp, size, name, pages }) {
+    const v = Math.max(...doc.versions.map(x => x.v)) + 1;
+    await fs.rename(tmp, this.filePath(doc.code, v));
+    const t = nowIso();
+    doc.versions.push({ v, name: cleanFileName(name), size, pages: pages || null, uploadedAt: t, cover: null });
+    doc.current = v; doc.updatedAt = t;
+    await this.save();
+    return doc;
+  }
+
+  async setCover(doc, v, ext, buf, w, h) {
+    const ver = doc.versions.find(x => x.v === v);
+    if (!ver) return null;
+    if (ver.cover && ver.cover.ext !== ext) await fs.rm(this.coverPath(doc.code, v, ver.cover.ext), { force: true });
+    await fs.writeFile(this.coverPath(doc.code, v, ext), buf);
+    ver.cover = { ext, w: w || null, h: h || null, at: nowIso() };
+    await this.save();
+    return ver;
+  }
+
+  async update(doc, patch) {
+    if (patch.title !== undefined) { const t = cleanTitle(patch.title); if (t) doc.title = t; }
+    if (patch.note !== undefined) doc.note = cleanTitle(patch.note);
+    if (patch.status === 'live' || patch.status === 'archived') doc.status = patch.status;
+    if (patch.current !== undefined) {
+      const v = Number(patch.current);
+      if (doc.versions.some(x => x.v === v)) doc.current = v;
+    }
+    doc.updatedAt = nowIso();
+    await this.save();
+    return doc;
+  }
+
+  // Removes the files for good. The code stays reserved, so an old printed QR can never open someone else's PDF.
+  async remove(doc) {
+    await fs.rm(join(this.docsDir, doc.code), { recursive: true, force: true });
+    this.db.docs = this.db.docs.filter(d => d !== doc);
+    if (!this.db.retired.includes(doc.code)) this.db.retired.push(doc.code);
+    await this.save();
+  }
+
+  countScan(doc) {
+    const day = istDay();
+    doc.scans = (doc.scans || 0) + 1;
+    doc.lastScanAt = nowIso();
+    doc.scanDays = doc.scanDays || {};
+    doc.scanDays[day] = (doc.scanDays[day] || 0) + 1;
+    const keys = Object.keys(doc.scanDays).sort();
+    while (keys.length > 400) delete doc.scanDays[keys.shift()];
+    // scans can come quickly; write them at most every 3 seconds
+    if (!this.scanTimer) this.scanTimer = setTimeout(() => { this.scanTimer = null; this.save().catch(() => {}); }, 3000);
+  }
+
+  async flush() { if (this.scanTimer) { clearTimeout(this.scanTimer); this.scanTimer = null; } await this.save(); }
+}
+
+// Writes a request body to a temp file, stopping if it grows past `max` bytes.
+export function receiveFile(req, path, max) {
+  return new Promise((resolve, reject) => {
+    let size = 0, head = Buffer.alloc(0), failed = false;
+    const out = createWriteStream(path);
+    const fail = (err) => { if (failed) return; failed = true; req.unpipe?.(out); out.destroy(); fs.rm(path, { force: true }).finally(() => reject(err)); };
+    req.on('data', (chunk) => {
+      size += chunk.length;
+      if (head.length < 8) head = Buffer.concat([head, chunk.subarray(0, 8)]);
+      if (size > max) { const e = new Error('too-big'); e.status = 413; fail(e); req.resume(); }
+    });
+    req.on('error', fail);
+    out.on('error', fail);
+    out.on('finish', () => { if (!failed) resolve({ size, head }); });
+    req.pipe(out);
+  });
+}
+
+export function readSmallBody(req, max) {
+  return new Promise((resolve, reject) => {
+    const parts = []; let size = 0;
+    req.on('data', (c) => { size += c.length; if (size > max) { const e = new Error('too-big'); e.status = 413; reject(e); req.destroy(); } else parts.push(c); });
+    req.on('end', () => resolve(Buffer.concat(parts)));
+    req.on('error', reject);
+  });
+}

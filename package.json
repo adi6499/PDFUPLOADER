@@ -1,0 +1,18 @@
+{
+  "name": "jinharsh-docs",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Upload a PDF, get a permanent QR code for visiting cards. Jinharsh Industrial Solutions.",
+  "type": "module",
+  "scripts": {
+    "start": "node server/server.mjs",
+    "vendor": "node tools/vendor.mjs",
+    "test": "node tools/test-api.mjs"
+  },
+  "devDependencies": {
+    "geist": "1.9.2",
+    "lucide-static": "1.69.0",
+    "pdfjs-dist": "6.5.438",
+    "qrcode-generator": "2.0.4"
+  }
+}
