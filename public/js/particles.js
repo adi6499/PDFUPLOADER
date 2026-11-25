@@ -398,6 +398,72 @@ export function bindImage(fromEl, toEl, { cols = 46, sample = null } = {}) {
   });
 }
 
+// ---------- a page of the reader forms out of its own grains ----------
+// The first time a page comes into view, its picture breaks into small cells (each keeps its colour). They fly in
+// from a loose cloud around the page, top rows first, a little orange while they fly, and land as a mosaic of the
+// page; the sharp page then appears underneath while the mosaic fades. The swarm follows the page if it scrolls.
+// Never more than a few pages at once (fast scrolling just shows them), and the page is always shown in the end.
+let pagesForming = 0;
+export function formPage(pageEl, canvas, { cols = 44, maxAtOnce = 3 } = {}) {
+  return new Promise((resolve) => {
+    let shown = false;
+    const show = () => { if (shown) return; shown = true; try { canvas.style.visibility = ''; pageEl.classList.remove('forming'); } catch {} resolve(); };
+    try {
+      if (calm() || !pageEl || !canvas || pagesForming >= maxAtOnce) { show(); return; }
+      const r0 = pageEl.getBoundingClientRect();
+      if (!r0.width || r0.bottom < 0 || r0.top > innerHeight) { show(); return; }
+      const rows = Math.max(8, Math.round(cols * (r0.height / r0.width)));
+      const oc = document.createElement('canvas'); oc.width = cols; oc.height = rows;
+      const og = oc.getContext('2d', { willReadFrequently: true });
+      og.drawImage(canvas, 0, 0, cols, rows);
+      const px = og.getImageData(0, 0, cols, rows).data;
+      pagesForming++;
+      let counted = true;
+      const uncount = () => { if (counted) { counted = false; pagesForming = Math.max(0, pagesForming - 1); } };
+      canvas.style.visibility = 'hidden';
+      pageEl.classList.add('forming');
+      const parts = [];
+      for (let j = 0; j < rows; j++) for (let i = 0; i < cols; i++) {
+        const k = (j * cols + i) * 4, ang = Math.random() * Math.PI * 2, d = 24 + Math.random() * r0.width * 0.5;
+        parts.push({ i, j, r: px[k], g: px[k + 1], b: px[k + 2], own: `rgb(${px[k]},${px[k + 1]},${px[k + 2]})`,
+          dx: Math.cos(ang) * d, dy: Math.sin(ang) * d + r0.height * 0.06,
+          delay: (j / rows) * 340 + Math.random() * 140, dur: 460 + Math.random() * 180 });
+      }
+      const t0 = performance.now(), FADE = 220;
+      let landed = 0;
+      const hard = setTimeout(() => { uncount(); show(); }, 2600); // the timer that always shows the page
+      fxAdd({
+        draw(g, dpr, now) {
+          const b = pageEl.getBoundingClientRect();
+          // gone, or scrolled away: just show it
+          if (!pageEl.isConnected || !b.width || b.bottom < -60 || b.top > innerHeight + 60) { clearTimeout(hard); uncount(); show(); return false; }
+          const el = now - t0, cw = b.width / cols, ch = b.height / rows;
+          let alpha = 1, all = true;
+          if (landed) { alpha = 1 - (el - landed) / FADE; if (alpha <= 0) return false; }
+          for (const p of parts) {
+            const t = clamp01((el - p.delay) / p.dur);
+            if (t < 1) all = false;
+            if (t <= 0) continue;
+            // small grains while they fly; only as they land do they spread out to fill their bit of the page
+            const e = easeOutBack(t), grow = clamp01((t - 0.7) / 0.3), gg = grow * grow;
+            const x = b.left + p.i * cw + p.dx * (1 - e), y = b.top + p.j * ch + p.dy * (1 - e);
+            const w = lerp(GRAIN, cw, gg), h = lerp(GRAIN, ch, gg);
+            const m = (1 - clamp01(t * 1.4)) * 0.55; // the orange tint fades as the grain lands
+            g.globalAlpha = alpha * Math.min(1, t * 4);
+            g.fillStyle = m > 0.01 ? `rgb(${Math.round(lerp(p.r, 234, m))},${Math.round(lerp(p.g, 88, m))},${Math.round(lerp(p.b, 12, m))})` : p.own;
+            const X = Math.round(x * dpr), Y = Math.round(y * dpr);
+            g.fillRect(X, Y, Math.max(1, Math.round((x + w) * dpr) - X + 1), Math.max(1, Math.round((y + h) * dpr) - Y + 1));
+          }
+          g.globalAlpha = 1;
+          if (all && !landed) { landed = el; clearTimeout(hard); uncount(); show(); } // the sharp page takes over underneath
+          return true;
+        },
+        end() { clearTimeout(hard); uncount(); show(); },
+      });
+    } catch { show(); }
+  });
+}
+
 // ---------- small effects on one shared layer: a burst, a pour, a dissolve ----------
 let fx = null;
 function fxAdd(item) {
@@ -634,7 +700,15 @@ export function enableButtonParticles() {
         const holder = btn.closest('.ju-sheet, .detail, .done');
         // (in the card window this finds the whole card first: it comes before the QR on it)
         const qr = holder ? holder.querySelector('.qr-tile svg, .card-stage') : null;
-        fillButton(btn, { fromRect: qr ? qr.getBoundingClientRect() : null, n: 70, onDone: () => bumpEl(btn) });
+        let fromRect = qr ? qr.getBoundingClientRect() : null;
+        // in the reader: out of the page being read (the part of it on screen)
+        const rd = btn.closest('.reader-ov');
+        if (rd) {
+          const mid = innerHeight / 2;
+          const pg = [...rd.querySelectorAll('.page')].find((p) => { const b = p.getBoundingClientRect(); return b.top <= mid && b.bottom >= mid; });
+          if (pg) { const b = pg.getBoundingClientRect(), top = Math.max(0, b.top), bottom = Math.min(innerHeight, b.bottom); fromRect = { left: b.left, top, width: b.width, height: bottom - top }; }
+        }
+        fillButton(btn, { fromRect, n: 70, onDone: () => bumpEl(btn) });
         return;
       }
       fillButton(btn);

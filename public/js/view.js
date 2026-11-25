@@ -4,7 +4,7 @@ import { icon } from '/vendor/icons.js';
 import { pdfjs, PDF_OPTS, fmtSize } from './pdfkit.js';
 import * as M from './motion.js';
 import { esc, ui, contactHtml, shareSheet, qrSheet, blankCover } from './site.js';
-import { bindImage, swallow } from './particles.js';
+import { bindImage, swallow, formPage } from './particles.js';
 
 const $ = (s, el = document) => el.querySelector(s);
 
@@ -224,6 +224,16 @@ async function startReader(pagesEl, scroller, box) {
 
   const state = new Map(); // page number -> { canvas, width, task }
   const near = new Set();
+  // each page forms out of its own grains the first time it comes into view (page 1 comes from the cover instead);
+  // a page drawn ahead of time stays hidden until then, so it never shows before its grains arrive
+  const formed = new Set([1]), seen = new Set();
+  const form = (el) => {
+    const num = Number(el.dataset.n), cv = el.querySelector('canvas');
+    if (!cv || formed.has(num)) return;
+    if (!seen.has(num)) { cv.style.visibility = 'hidden'; el.classList.add('forming'); return; }
+    formed.add(num);
+    formPage(el, cv);
+  };
   let busy = false;
   const quality = () => Math.min(3, (window.devicePixelRatio || 1) * 1.35);
 
@@ -246,6 +256,7 @@ async function startReader(pagesEl, scroller, box) {
     if (!near.has(num)) { cv.width = cv.height = 0; state.delete(num); return; }
     const old = el.querySelector('canvas'); if (old) { old.width = old.height = 0; old.remove(); }
     el.insertBefore(cv, el.querySelector('.pno'));
+    form(el);
     const ph = el.querySelector('img.ph'); if (ph) ph.remove();
     state.set(num, { canvas: cv, width: w, task: null });
     page.cleanup();
@@ -288,7 +299,14 @@ async function startReader(pagesEl, scroller, box) {
   const posObs = new IntersectionObserver((entries) => {
     for (const e of entries) if (e.isIntersecting) M.roll($$('#posN'), e.target.dataset.n);
   }, { root: scroller, rootMargin: '-45% 0px -45% 0px' });
-  for (const el of pagesEl.children) { nearObs.observe(el); posObs.observe(el); }
+  // which pages are on screen (or about to be)
+  const showObs = new IntersectionObserver((entries) => {
+    for (const e of entries) {
+      const num = Number(e.target.dataset.n);
+      if (e.isIntersecting) { seen.add(num); form(e.target); } else seen.delete(num);
+    }
+  }, { root: scroller, rootMargin: '0px 0px 60px 0px' });
+  for (const el of pagesEl.children) { nearObs.observe(el); posObs.observe(el); showObs.observe(el); }
 
   // zoom: wider pages (sideways scroll), redrawn sharp
   const steps = [1, 1.25, 1.5, 2, 2.5];
@@ -308,7 +326,7 @@ async function startReader(pagesEl, scroller, box) {
   window.addEventListener('resize', onResize, { passive: true });
   // closing the reader lets go of everything it drew
   return () => {
-    nearObs.disconnect(); posObs.disconnect();
+    nearObs.disconnect(); posObs.disconnect(); showObs.disconnect();
     window.removeEventListener('resize', onResize);
     for (const num of [...state.keys()]) release(num);
     near.clear();

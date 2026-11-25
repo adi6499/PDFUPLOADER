@@ -161,3 +161,8 @@
 .ju:not(.dark) .reader-ov .rbar .sep { background: rgba(0, 0, 0, .12); }
 .ju:not(.dark) .reader-ov .page { box-shadow: 0 0 0 1px rgba(0,0,0,.06), 0 18px 44px -14px rgba(20,22,28,.3); }
 .ju:not(.dark) .reader-ov .reader-note { color: #696971; }
+
+/* a reader page while it forms out of grains: no white sheet behind them, no page number yet */
+.reader-ov .page { transition: background-color .25s ease, box-shadow .35s ease; }
+.reader-ov .page.forming { background: transparent !important; box-shadow: none !important; transition: none; }
+.reader-ov .page.forming .pno { opacity: 0; }
