@@ -583,10 +583,44 @@ export function fillButton(btn, { fromRect = null, n = 56, onDone } = {}) {
   });
 }
 
+// A card turning over shakes a little dust off its edges: while it turns, grains fly out sideways from its left and
+// right edges (which swing in towards the middle and out again), drift down and fade.
+export function cardDust(el, { n = 90, turnMs = 800 } = {}) {
+  if (calm() || !el) return;
+  const r = el.getBoundingClientRect();
+  if (!r.width) return;
+  const dark = document.documentElement.classList.contains('dark');
+  const ink = dark ? 'rgb(236,236,240)' : 'rgb(17,17,19)';
+  const mid = r.left + r.width / 2, half = r.width / 2, t0 = performance.now();
+  const ps = Array.from({ length: n }, (_, i) => {
+    const born = Math.random() * turnMs * 0.75;
+    // where the edge is on screen at that moment of the turn
+    const reach = Math.abs(Math.cos(Math.PI * easeInOut(born / turnMs))) * half;
+    const dir = i % 2 ? 1 : -1;
+    return { born, x: mid + dir * reach, y: r.top + Math.random() * r.height, vx: dir * (0.5 + Math.random() * 2.4), vy: -0.9 + Math.random() * 1.2,
+      s: 1.1 + Math.random() * 1.7, life: 520 + Math.random() * 520, col: Math.random() < 0.62 ? 'rgb(234,88,12)' : ink };
+  });
+  fxAdd({
+    draw(g, dpr, now) {
+      const el = now - t0;
+      let alive = false;
+      for (const p of ps) {
+        const t = el - p.born;
+        if (t < 0) { alive = true; continue; }
+        if (t > p.life) continue;
+        alive = true;
+        const k = t / 16.7; // in frames
+        dot(g, dpr, p.x + p.vx * k * 0.92, p.y + p.vy * k + 0.022 * k * k, p.s, p.col, 1 - easeInOut(t / p.life));
+      }
+      return alive;
+    },
+  });
+}
+
 // Every button press fills it with grains like water in a jar; download buttons are filled from the QR in the
 // same window. Closing buttons are left to the black hole.
 let buttonsInstalled = false;
-const DOWNLOAD = 'a[download], [data-dl], [data-png], [data-svg], [data-act="svg"], [data-act="png"], [data-card-svg], [data-card-png]';
+const DOWNLOAD = 'a[download], [data-dl], [data-png], [data-svg], [data-act="svg"], [data-act="png"], [data-card-svg], [data-card-png], [data-card-pdf]';
 const CLOSING = '[data-x], [data-sheet="close"], #rClose, .close-x';
 export function enableButtonParticles() {
   if (buttonsInstalled) return;
@@ -598,7 +632,8 @@ export function enableButtonParticles() {
     try {
       if (btn.matches(DOWNLOAD)) {
         const holder = btn.closest('.ju-sheet, .detail, .done');
-        const qr = holder ? holder.querySelector('.qr-tile svg, .card-preview svg') : null;
+        // (in the card window this finds the whole card first: it comes before the QR on it)
+        const qr = holder ? holder.querySelector('.qr-tile svg, .card-stage') : null;
         fillButton(btn, { fromRect: qr ? qr.getBoundingClientRect() : null, n: 70, onDone: () => bumpEl(btn) });
         return;
       }

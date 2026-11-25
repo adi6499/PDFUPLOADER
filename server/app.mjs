@@ -124,7 +124,9 @@ export async function createApp(overrides = {}) {
     if (!full.startsWith(PUBLIC + sep)) return fail(res, 404, 'Not found');
     const type = MIME[extname(full).toLowerCase()] || 'application/octet-stream';
     if (type.startsWith('text/html')) res.setHeader('Content-Security-Policy', CSP);
-    return sendFile(req, res, full, type, { maxAge: rel.startsWith('/vendor/') ? 604800 : 0 });
+    // big files that never change (the PDF reader, the fonts) are kept by the browser for a week; everything else,
+    // including the icon set that grows with new screens, is checked each time (a quick "not changed" answer)
+    return sendFile(req, res, full, type, { maxAge: /^\/vendor\/(pdfjs|fonts)\//.test(rel) ? 604800 : 0 });
   }
 
   // ---------- the scan page: /c/<code> ----------

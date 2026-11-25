@@ -296,11 +296,32 @@ html.vt-theme::view-transition-old(root), html.vt-theme::view-transition-new(roo
 }
 
 /* ---------- the visiting card window ---------- */
-.ju .ju-sheet.card-sheet { max-width: 600px; text-align: center; }
+.ju .ju-sheet.card-sheet { max-width: 620px; text-align: center; }
 .card-sheet h2 { margin: 2px 0 4px; font-size: 22px; letter-spacing: -.02em; }
-.card-sub { margin: 0 auto 14px; max-width: 460px; font-size: 13.5px; }
-.card-warn { text-align: left; margin: 0 0 14px; }
-.card-preview { width: 100%; aspect-ratio: 89 / 51; border-radius: 10px; overflow: hidden; background: #fff;
-  box-shadow: 0 0 0 1px rgba(0,0,0,.06), 0 22px 50px -18px rgba(20,22,28,.45); margin: 4px 0 18px; }
-.card-preview svg { display: block; width: 100%; height: 100%; }
+.card-sub { margin: 0 auto 12px; max-width: 470px; font-size: 13.5px; }
+.card-warn { text-align: left; margin: 0 0 12px; padding: 10px 14px; border-radius: 14px; font-size: 13px; align-items: center; }
+.card-warn p { margin: 0; opacity: 1; color: inherit; line-height: 1.45; }
+.card-warn p b { color: inherit; }
+/* the card: a stage with depth, a layer that leans towards the mouse, and the card that turns over */
+.card-stage { perspective: 1500px; width: min(100%, 540px, max(260px, calc((100vh - 430px) * 1.745)));
+  width: min(100%, 540px, max(260px, calc((100dvh - 430px) * 1.745))); margin: 4px auto 12px; cursor: pointer; outline: none; border-radius: 10px; }
+.card-stage:focus-visible { box-shadow: 0 0 0 3px var(--accent); }
+.card-tilt { transform-style: preserve-3d; transition: transform .7s cubic-bezier(.2, .8, .2, 1); }
+.card-flip { position: relative; aspect-ratio: 89 / 51; transform-style: preserve-3d;
+  transition: transform var(--sp-gentle-ms, .9s) var(--sp-gentle, cubic-bezier(.3, 1.15, .4, 1)); }
+.card-flip.is-back { transform: rotateY(180deg); }
+.card-face { position: absolute; inset: 0; border-radius: 8px; overflow: hidden; background: #fff;
+  -webkit-backface-visibility: hidden; backface-visibility: hidden;
+  box-shadow: 0 0 0 1px rgba(0,0,0,.06), 0 24px 54px -20px rgba(20,22,28,.5); }
+.card-face.back { transform: rotateY(180deg); background: #141416; }
+.ju.dark .card-face { box-shadow: 0 0 0 1px rgba(255,255,255,.2), 0 0 0 5px rgba(255,255,255,.04), 0 28px 60px -18px rgba(0,0,0,.9); }
+.card-face > svg { display: block; width: 100%; height: 100%; }
+.card-sheet .card-qr.qr-tile { position: absolute; padding: 0; border-radius: 0; background: transparent; box-shadow: none; cursor: crosshair; }
+.card-qr svg { display: block; width: 100%; height: auto; }
+.card-side-row { display: flex; align-items: center; justify-content: center; gap: 12px; flex-wrap: wrap; margin: 0 0 14px; }
+.card-tip { font-size: 12.5px; }
 .card-btns { justify-content: center; }
+.card-btns .ju-btn { flex: 1 1 auto; }
+.card-btns .ju-btn.primary { flex: 2 1 auto; }
+.card-foot { margin: 12px auto 0; max-width: 470px; font-size: 12.5px; line-height: 1.5; }
+@media (prefers-reduced-motion: reduce) { .card-flip, .card-tilt { transition: none; } }
