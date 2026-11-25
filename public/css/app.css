@@ -294,3 +294,13 @@ html.vt-theme::view-transition-old(root), html.vt-theme::view-transition-new(roo
   .share-opt { padding: 10px 2px 9px; font-size: 11.5px; border-radius: 16px; }
   .so-ic { width: 40px; height: 40px; }
 }
+
+/* ---------- the visiting card window ---------- */
+.ju .ju-sheet.card-sheet { max-width: 600px; text-align: center; }
+.card-sheet h2 { margin: 2px 0 4px; font-size: 22px; letter-spacing: -.02em; }
+.card-sub { margin: 0 auto 14px; max-width: 460px; font-size: 13.5px; }
+.card-warn { text-align: left; margin: 0 0 14px; }
+.card-preview { width: 100%; aspect-ratio: 89 / 51; border-radius: 10px; overflow: hidden; background: #fff;
+  box-shadow: 0 0 0 1px rgba(0,0,0,.06), 0 22px 50px -18px rgba(20,22,28,.45); margin: 4px 0 18px; }
+.card-preview svg { display: block; width: 100%; height: 100%; }
+.card-btns { justify-content: center; }

@@ -158,7 +158,7 @@ export async function createApp(overrides = {}) {
       state = { status: doc ? 'archived' : store.isRetired(code) ? 'retired' : 'missing', doc: doc ? { title: doc.title, code: doc.code } : null, others };
       meta = `<title>${esc(SITE.company?.short || 'Jinharsh')}</title>\n  <meta name="robots" content="noindex">`;
     }
-    const data = JSON.stringify({ ...state, site: SITE, publicUrl: B }).replace(/</g, '\\u003c');
+    const data = JSON.stringify({ ...state, site: SITE, publicUrl: B, printable: PRINTABLE }).replace(/</g, '\\u003c');
     const html = viewTemplate.replace('<!--META-->', meta).replace('<!--DATA-->', `<script type="application/json" id="boot">${data}</script>`);
     send(res, doc ? 200 : 404, html, { 'Content-Type': 'text/html; charset=utf-8', 'Content-Security-Policy': CSP, 'Cache-Control': 'no-cache' });
   }
@@ -235,7 +235,7 @@ export async function createApp(overrides = {}) {
     // public: every live catalogue, for the front page
     if (parts[1] === 'catalogs' && m === 'GET') {
       const list = store.list().filter((d) => d.status === 'live').map(publicDoc);
-      return send(res, 200, { catalogs: list, publicUrl: base(req), site: SITE }, { 'Cache-Control': 'public, max-age=30' });
+      return send(res, 200, { catalogs: list, publicUrl: base(req), site: SITE, printable: PRINTABLE }, { 'Cache-Control': 'public, max-age=30' });
     }
 
     if (m !== 'GET' && m !== 'HEAD' && !sameOrigin(req)) { req.resume(); return fail(res, 403, 'Not allowed from another website.'); }

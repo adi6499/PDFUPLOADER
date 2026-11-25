@@ -3,11 +3,34 @@ import { icon } from '/vendor/icons.js';
 import { qrSvg, qrSvgFile, qrPng, saveBlob } from './qr.js';
 import * as M from './motion.js';
 import { assemble, enableHoverScatter, enableButtonParticles, swallow } from './particles.js';
+import { cardSheet } from './card.js';
 
 enableHoverScatter();    // big QR codes: the grains scatter away from the mouse or finger
 enableButtonParticles(); // every button press sprays a few grains; download buttons pour them in
 
 // closing a window: a black hole opens where you pressed X and swallows it, while the veil clears
+// light / dark: the sun or moon in the top bar; the new look spreads out in a circle from it.
+// Until it is pressed the page follows the phone's own setting; afterwards the choice is kept on this device.
+function wireTheme() {
+  const b = document.getElementById('themeTop');
+  if (!b) return;
+  const paint = () => {
+    const dark = document.documentElement.classList.contains('dark');
+    b.innerHTML = icon(dark ? 'sun' : 'moon');
+    b.setAttribute('aria-label', dark ? 'Switch to light' : 'Switch to dark');
+    b.title = dark ? 'Light mode' : 'Dark mode';
+  };
+  paint();
+  b.addEventListener('click', () => {
+    const r = b.getBoundingClientRect();
+    M.themeSwitch(r.left + r.width / 2, r.top + r.height / 2, () => {
+      try { JUI.setDark(!document.documentElement.classList.contains('dark')); } catch {}
+      paint();
+    });
+  });
+}
+try { wireTheme(); } catch { /* cosmetic */ }
+
 export const centreOf = (el) => { const b = el.getBoundingClientRect(); return { x: b.left + b.width / 2, y: b.top + b.height / 2 }; };
 const swallowOut = (sheet, ov, at) => { swallow(sheet, { at }); return M.play(ov, [{ opacity: 1 }, { opacity: 0 }], { duration: 480, easing: 'ease-in' }); };
 
@@ -53,7 +76,7 @@ export async function share(title, url) {
 
 // The Share window: grains burst out of the Share button and bind together as the QR code,
 // with the ways to send it underneath (WhatsApp, email, copy link, the QR picture, and the phone's own share menu).
-export function shareSheet({ link, title, from = null }) {
+export function shareSheet({ link, title, from = null, site = {}, printable = true }) {
   const ov = document.createElement('div');
   ov.className = 'ju-overlay';
   const safe = String(title || 'Jinharsh catalogues').replace(/[\\/:*?"<>|]+/g, ' ').trim().slice(0, 90);
@@ -69,12 +92,16 @@ export function shareSheet({ link, title, from = null }) {
       <a class="share-opt" href="mailto:?subject=${encodeURIComponent(title)}&body=${encodeURIComponent(title + '\n' + link)}"><span class="so-ic">${icon('mail')}</span><span>Email</span></a>
       <button class="share-opt" type="button" data-copy><span class="so-ic">${icon('copy')}</span><span>Copy link</span></button>
       <button class="share-opt" type="button" data-png><span class="so-ic">${icon('download')}</span><span>QR picture</span></button>
+      <button class="share-opt" type="button" data-card><span class="so-ic">${icon('id-card')}</span><span>Visiting card</span></button>
       ${navigator.share ? `<button class="share-opt" type="button" data-more><span class="so-ic">${icon('share-2')}</span><span>More…</span></button>` : ''}
     </div>
   </div>`;
   document.body.appendChild(ov);
   document.body.style.overflow = 'hidden';
   const sheet = ov.querySelector('.share-sheet');
+  // even rows: up to five side by side, six as two rows of three
+  const grid = ov.querySelector('.share-grid'), n = grid.children.length;
+  grid.style.gridTemplateColumns = `repeat(${n <= 5 ? n : Math.ceil(n / 2)}, minmax(0, 1fr))`;
   let closing = false;
   const close = async (at) => {
     if (closing) return; closing = true;
@@ -94,6 +121,7 @@ export function shareSheet({ link, title, from = null }) {
     }
     if (b.matches('[data-png]')) { saveBlob(await qrPng(link, true, 2000), `QR ${safe}.png`); toast('QR picture saved'); }
     if (b.matches('[data-more]')) { try { await navigator.share({ title, text: title, url: link }); } catch {} }
+    if (b.matches('[data-card]')) { cardSheet({ link, title, site, printable, from: b }); close(centreOf(b)); }
   });
   // the grains come out of the button that was pressed (or from all around)
   setTimeout(() => assemble(ov.querySelector('.qr-big'), link, { from }), 60);

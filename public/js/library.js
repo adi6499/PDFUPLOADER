@@ -8,6 +8,7 @@ import * as M from './motion.js';
 import { blankCover } from './site.js';
 import { collapseFrom, assemble, enableHoverScatter, enableButtonParticles, swallow } from './particles.js';
 import { takeFiles } from './handoff.js';
+import { cardSheet } from './card.js';
 
 const $ = (s, el = document) => el.querySelector(s);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -59,7 +60,7 @@ async function start() {
   try {
     const inf = await API.info();
     if (!inf || !inf.publicUrl) throw new Error('no program');
-    S.publicUrl = inf.publicUrl; S.printable = inf.printable; S.maxUploadMB = inf.maxUploadMB; S.version = inf.version; S.auth = inf.auth;
+    S.publicUrl = inf.publicUrl; S.printable = inf.printable; S.maxUploadMB = inf.maxUploadMB; S.version = inf.version; S.auth = inf.auth; S.site = inf.site || {};
     S.trial = !!inf.trial; S.storage = inf.storage; S.countsScans = inf.countsScans !== false;
     API.setMode(inf.storage);
     if (inf.storageReady === false) return offline('storage');
@@ -230,6 +231,7 @@ function detailHtml(d) {
         <button class="ju-btn primary sm" type="button" data-act="svg">${icon('download')}QR for printing (SVG)</button>
         <button class="ju-btn sm" type="button" data-act="png">${icon('image')}PNG</button>
         <button class="ju-btn sm" type="button" data-act="print">${icon('printer')}Print</button>
+        <button class="ju-btn sm" type="button" data-act="card">${icon('id-card')}Visiting card</button>
       </div>
       <div class="btns">
         <a class="ju-btn sm" href="/c/${esc(d.code)}?preview=1" target="_blank" rel="noopener">${icon('eye')}Open page</a>
@@ -474,11 +476,11 @@ function showDone(sh, doc, idx, count, resolveAll, swirl) {
   } else assemble(tile, doc.link);
   ui(() => M.bump($('.done .tick', sh), 1.12));
 
-  const finish = (next) => {
-    // the QR flies from the sheet into its row in the list
+  const finish = (next, at) => {
+    // the window is swallowed by a black hole at the button, while the new QR flies into its row in the list
     const r = $('#doneQr', sh)?.getBoundingClientRect();
     sh.onclick = null; S.sheetResolve = null;
-    closeSheet(true, { quiet: true });
+    closeSheet(true, { at });
     const row = rowEl(doc.code);
     const target = row?.querySelector('.big-qr');
     if (row && target && r) {
@@ -492,7 +494,8 @@ function showDone(sh, doc, idx, count, resolveAll, swirl) {
     if (dl) { ui(() => M.nudgeDown(dl.querySelector('.i'))); downloadQR(doc, dl.dataset.dl); }
     const cp = e.target.closest('[data-copy]');
     if (cp) copyLink(cp.dataset.copy, cp);
-    if (e.target.closest('[data-sheet="done"]')) finish('next');
+    const doneBtn = e.target.closest('[data-sheet="done"]');
+    if (doneBtn) { const b = doneBtn.getBoundingClientRect(); finish('next', { x: b.left + b.width / 2, y: b.top + b.height / 2 }); }
   };
   S.sheetResolve = () => { sh.onclick = null; resolveAll('next'); };
 }
@@ -693,6 +696,7 @@ function wire() {
     if (act === 'copy') return copyLink(d.link, el);
     if (act === 'svg' || act === 'png') { ui(() => M.nudgeDown(el.querySelector('.i'))); return downloadQR(d, act); }
     if (act === 'print') return printQR(d);
+    if (act === 'card') return cardSheet({ link: d.link, title: d.title, site: S.site, printable: S.printable, from: el });
     if (act === 'replace') { S.replaceFor = code; $('#replaceInput').click(); return; }
     if (act === 'details') return detailsSheet(d);
     if (act === 'use-version') {

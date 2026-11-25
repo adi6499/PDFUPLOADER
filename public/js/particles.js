@@ -327,7 +327,7 @@ function scatter(tile, svg, link, firstEvent) {
 // Used by "Read now": the cover on the page dissolves into grains (each keeps its colour), they scatter,
 // then bind together as the first page of the reader. `toEl` stays hidden until they have landed;
 // a timer always shows it, and "reduce motion" just shows it.
-export function bindImage(fromEl, toEl, { cols = 46 } = {}) {
+export function bindImage(fromEl, toEl, { cols = 46, sample = null } = {}) {
   return new Promise((resolve) => {
     const reveal = () => { try { toEl.style.visibility = ''; } catch {} resolve(); };
     try {
@@ -338,10 +338,11 @@ export function bindImage(fromEl, toEl, { cols = 46 } = {}) {
       // the grain colours, read from the cover picture (falls back to Jinharsh colours if the picture can't be read)
       let px = null;
       try {
-        if (fromEl.tagName === 'IMG' && fromEl.complete && fromEl.naturalWidth) {
+        const src = sample || fromEl;
+        if (src.tagName === 'CANVAS' || (src.tagName === 'IMG' && src.complete && src.naturalWidth)) {
           const oc = document.createElement('canvas'); oc.width = cols; oc.height = rows;
           const og = oc.getContext('2d', { willReadFrequently: true });
-          og.drawImage(fromEl, 0, 0, cols, rows);
+          og.drawImage(src, 0, 0, cols, rows);
           px = og.getImageData(0, 0, cols, rows).data;
         }
       } catch { px = null; }
@@ -439,55 +440,6 @@ function colourOf(el) {
   } catch { return 'rgb(17,17,19)'; }
 }
 
-// A little spray of grains from (x, y) that flies out, falls a bit and fades.
-export function burst(x, y, { n = 26, colors = ['rgb(234,88,12)', 'rgb(17,17,19)'] } = {}) {
-  if (calm()) return;
-  const t0 = performance.now();
-  const ps = Array.from({ length: n }, () => {
-    const a = Math.random() * Math.PI * 2, v = 60 + Math.random() * 170; // px per second
-    return { vx: Math.cos(a) * v, vy: Math.sin(a) * v - 60, s: 1.4 + Math.random() * 2.2, life: 420 + Math.random() * 320, col: colors[Math.floor(Math.random() * colors.length)] };
-  });
-  fxAdd({
-    draw(g, dpr, now) {
-      const el = now - t0; let alive = false;
-      for (const p of ps) {
-        const t = el / p.life; if (t >= 1) continue; alive = true;
-        const sec = el / 1000, k = 1 - t;
-        dot(g, dpr, x + p.vx * sec, y + p.vy * sec + 260 * sec * sec, p.s * (0.4 + 0.6 * k), p.col, Math.min(1, k * 1.6));
-      }
-      return alive;
-    },
-  });
-}
-
-// Grains pour from `fromRect` (or from above the button) into `btn`; then the button gives a little bounce.
-export function pour(btn, fromRect = null, { n = 70, colors = ['rgb(17,17,19)', 'rgb(234,88,12)'], onDone } = {}) {
-  if (calm() || !btn) { if (onDone) onDone(); return; }
-  const b = btn.getBoundingClientRect();
-  const t0 = performance.now();
-  const ps = Array.from({ length: n }, () => {
-    let sx, sy;
-    if (fromRect && fromRect.width) { sx = fromRect.left + Math.random() * fromRect.width; sy = fromRect.top + Math.random() * fromRect.height; }
-    else { const a = -Math.PI / 2 + (Math.random() - 0.5) * 2.2, d = 50 + Math.random() * 90; sx = b.left + b.width / 2 + Math.cos(a) * d; sy = b.top + b.height / 2 + Math.sin(a) * d; }
-    return { sx, sy, tx: b.left + b.width * (0.3 + Math.random() * 0.4), ty: b.top + b.height * (0.35 + Math.random() * 0.3),
-      delay: Math.random() * 260, dur: 380 + Math.random() * 260, s: 1.4 + Math.random() * 1.8, col: colors[Math.floor(Math.random() * colors.length)] };
-  });
-  let landed = false;
-  fxAdd({
-    draw(g, dpr, now) {
-      const el = now - t0; let alive = false;
-      for (const p of ps) {
-        const t = clamp01((el - p.delay) / p.dur); if (t >= 1) continue; alive = true;
-        const e = t * t * t; // speeds up as it falls in
-        dot(g, dpr, lerp(p.sx, p.tx, e), lerp(p.sy, p.ty, e), p.s * (1 - 0.5 * t), p.col, el < p.delay ? 0 : 1);
-      }
-      if (!alive && !landed) { landed = true; if (onDone) onDone(); }
-      return alive;
-    },
-    end() { if (!landed) { landed = true; if (onDone) onDone(); } },
-  });
-}
-
 // `el` is swallowed by a black hole: it breaks into grains that spiral into a small dark hole at `at`
 // (the X that was pressed; the middle of `el` if not given), faster and faster, and the hole closes behind them.
 // `el` is hidden at once; the promise ends when the hole has closed. `sample` (a canvas or picture) gives the grains
@@ -570,27 +522,87 @@ export function swallow(el, { sample = null, cols = 48, at = null } = {}) {
 // (the earlier name; closing used to scatter the panel)
 export const dissolve = swallow;
 
-// Every button press sprays a few grains; download buttons pour grains in instead.
+// A button fills up like a jar under a tap: grains rain into it from above (or pour out of `fromRect`, for
+// example the QR in the same window), and where they land an orange "water" level rises with a gentle wave,
+// then drains away. Drawn on top of the button; the button itself is never changed.
+function radiusOf(el) { try { return parseFloat(getComputedStyle(el).borderTopLeftRadius) || 0; } catch { return 0; } }
+export function fillButton(btn, { fromRect = null, n = 56, onDone } = {}) {
+  if (calm() || !btn) { if (onDone) onDone(); return; }
+  const b = btn.getBoundingClientRect();
+  if (!b.width) { if (onDone) onDone(); return; }
+  const rad = Math.min(radiusOf(btn), b.height / 2, b.width / 2);
+  const inset = Math.max(4, rad * 0.6);
+  const t0 = performance.now();
+  const ps = Array.from({ length: n }, () => {
+    let sx, sy;
+    if (fromRect && fromRect.width) { sx = fromRect.left + Math.random() * fromRect.width; sy = fromRect.top + Math.random() * fromRect.height; }
+    else { sx = b.left + b.width * (0.1 + Math.random() * 0.8) + (Math.random() - 0.5) * b.width * 0.5; sy = b.top - 24 - Math.random() * 110; }
+    return { sx, sy, tx: b.left + inset + Math.random() * (b.width - inset * 2), delay: Math.random() * 300, dur: 330 + Math.random() * 230,
+      s: 1.4 + Math.random() * 1.8, col: Math.random() < 0.7 ? 'rgb(234,88,12)' : 'rgb(17,17,19)' };
+  });
+  const levelMax = 0.66;
+  let level = 0, allIn = 0, called = false;
+  const done = () => { if (!called) { called = true; if (onDone) onDone(); } };
+  fxAdd({
+    draw(g, dpr, now) {
+      const el = now - t0;
+      let arrived = 0;
+      for (const p of ps) {
+        const t = clamp01((el - p.delay) / p.dur);
+        if (t >= 1) { arrived++; continue; }
+        if (el < p.delay) continue;
+        const surface = b.bottom - level * b.height;
+        const e = t * t; // falls faster and faster, like a drop
+        dot(g, dpr, lerp(p.sx, p.tx, t), lerp(p.sy, surface, e), p.s, p.col, 1);
+      }
+      // the water level follows the grains that have landed
+      level += (levelMax * (arrived / n) - level) * 0.22;
+      if (arrived === n && !allIn) { allIn = el; done(); }
+      let draw = level, alpha = 1;
+      if (allIn && el > allIn + 160) { const d = clamp01((el - allIn - 160) / 420); draw = level * (1 - easeInOut(d)); alpha = 1 - d * 0.5; }
+      if (draw > 0.005) {
+        g.save();
+        g.beginPath();
+        if (g.roundRect) g.roundRect(b.left * dpr, b.top * dpr, b.width * dpr, b.height * dpr, rad * dpr); else g.rect(b.left * dpr, b.top * dpr, b.width * dpr, b.height * dpr);
+        g.clip();
+        const top = b.bottom - draw * b.height, amp = Math.min(2.4, draw * b.height * 0.18);
+        g.beginPath();
+        g.moveTo(b.left * dpr, b.bottom * dpr);
+        for (let x = b.left; x <= b.right + 4; x += 4) g.lineTo(x * dpr, (top + Math.sin(x * 0.09 + el * 0.012) * amp) * dpr);
+        g.lineTo(b.right * dpr, b.bottom * dpr);
+        g.closePath();
+        g.fillStyle = `rgba(234,88,12,${0.34 * alpha})`;
+        g.fill();
+        g.restore();
+      }
+      const alive = !allIn || el < allIn + 160 + 440;
+      if (!alive) done();
+      return alive;
+    },
+    end: done,
+  });
+}
+
+// Every button press fills it with grains like water in a jar; download buttons are filled from the QR in the
+// same window. Closing buttons are left to the black hole.
 let buttonsInstalled = false;
-const DOWNLOAD = 'a[download], [data-dl], [data-png], [data-svg], [data-act="svg"], [data-act="png"]';
+const DOWNLOAD = 'a[download], [data-dl], [data-png], [data-svg], [data-act="svg"], [data-act="png"], [data-card-svg], [data-card-png]';
+const CLOSING = '[data-x], [data-sheet="close"], #rClose, .close-x';
 export function enableButtonParticles() {
   if (buttonsInstalled) return;
   buttonsInstalled = true;
   document.addEventListener('click', (e) => {
     if (calm()) return;
     const btn = e.target && e.target.closest && e.target.closest('button, .ju-btn, .ju-icon, .share-opt, .c-item, .ju-chip, .ju-tile');
-    if (!btn || btn.disabled) return;
+    if (!btn || btn.disabled || btn.matches(CLOSING)) return;
     try {
       if (btn.matches(DOWNLOAD)) {
-        // from the QR in the same window, if there is one; else from above the button
         const holder = btn.closest('.ju-sheet, .detail, .done');
-        const qr = holder ? holder.querySelector('.qr-tile svg') : null;
-        pour(btn, qr ? qr.getBoundingClientRect() : null, { onDone: () => bumpEl(btn) });
+        const qr = holder ? holder.querySelector('.qr-tile svg, .card-preview svg') : null;
+        fillButton(btn, { fromRect: qr ? qr.getBoundingClientRect() : null, n: 70, onDone: () => bumpEl(btn) });
         return;
       }
-      const b = btn.getBoundingClientRect();
-      const x = e.clientX || b.left + b.width / 2, y = e.clientY || b.top + b.height / 2;
-      burst(x, y, { colors: [colourOf(btn), 'rgb(234,88,12)'] });
+      fillButton(btn);
     } catch {}
   }, { capture: true, passive: true });
 }

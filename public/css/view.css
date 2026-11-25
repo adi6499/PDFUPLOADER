@@ -151,3 +151,13 @@
   .reader-ov .rbar .pos { padding: 0 8px 0 10px; font-size: 13px; }
 }
 @media (max-width: 360px) { .reader-ov .rbar #zOut, .reader-ov .rbar #zIn, .reader-ov .rbar .zoom-val { display: none; } }
+
+/* the reader in light mode */
+.ju:not(.dark) .reader-ov { background: rgba(238, 238, 242, .94); }
+.ju:not(.dark) .reader-ov .rbar { background: rgba(255, 255, 255, .86); color: #141416; box-shadow: 0 0 0 1px rgba(0,0,0,.06), 0 12px 30px rgba(20,22,28,.16); }
+.ju:not(.dark) .reader-ov .rbar .ju-icon { color: #141416; }
+.ju:not(.dark) .reader-ov .rbar .ju-icon:hover { background: rgba(0, 0, 0, .06); }
+.ju:not(.dark) .reader-ov .rbar .zoom-val { color: #696971; }
+.ju:not(.dark) .reader-ov .rbar .sep { background: rgba(0, 0, 0, .12); }
+.ju:not(.dark) .reader-ov .page { box-shadow: 0 0 0 1px rgba(0,0,0,.06), 0 18px 44px -14px rgba(20,22,28,.3); }
+.ju:not(.dark) .reader-ov .reader-note { color: #696971; }

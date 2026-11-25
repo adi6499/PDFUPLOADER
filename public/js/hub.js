@@ -11,7 +11,7 @@ const params = new URLSearchParams(location.search);
 const cat = params.get('cat');
 if (cat && /^[A-Za-z0-9-]{1,40}$/.test(cat)) location.replace('/c/' + cat.toLowerCase());
 
-const S = { all: [], brand: '', q: '', publicUrl: location.origin, site: {} };
+const S = { all: [], brand: '', q: '', publicUrl: location.origin, site: {}, printable: true };
 
 ui(() => {
   $('#searchIcon').outerHTML = icon('search');
@@ -45,7 +45,7 @@ fetch('/api/info').then((r) => r.json()).then((inf) => {
   window.addEventListener('dragleave', () => { depth = Math.max(0, depth - 1); if (!depth) $('#dropVeil').hidden = true; });
   window.addEventListener('drop', (e) => { if (!hasFiles(e)) return; e.preventDefault(); depth = 0; $('#dropVeil').hidden = true; toTeam(e.dataTransfer.files); });
 }).catch(() => {});
-$('#hubShare').addEventListener('click', (e) => shareSheet({ link: S.publicUrl + '/', title: 'Jinharsh Catalogues', from: e.currentTarget }));
+$('#hubShare').addEventListener('click', (e) => shareSheet({ link: S.publicUrl + '/', title: 'Jinharsh Catalogues', from: e.currentTarget, site: S.site, printable: S.printable }));
 
 // waiting shapes while the list arrives (plain, nothing moves or shines)
 $('#cards').innerHTML = Array.from({ length: 6 }, () => '<div class="cat-card ghost-card"><div class="cc-cover"></div><div class="cc-body"><i></i><i></i></div></div>').join('');
@@ -54,7 +54,7 @@ async function load() {
   try {
     const r = await fetch('/api/catalogs');
     const j = await r.json();
-    S.all = j.catalogs || []; S.publicUrl = (j.publicUrl || location.origin).replace(/\/$/, ''); S.site = j.site || {};
+    S.all = j.catalogs || []; S.publicUrl = (j.publicUrl || location.origin).replace(/\/$/, ''); S.site = j.site || {}; S.printable = j.printable !== false;
   } catch {
     $('#cards').innerHTML = `<div class="ju-card empty-hub"><h3>The catalogues could not be loaded</h3><p class="ju-muted">Please check the internet connection and try again.</p><button class="ju-btn primary" type="button" data-reload>Try again</button></div>`;
     return;

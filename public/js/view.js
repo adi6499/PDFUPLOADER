@@ -33,8 +33,9 @@ function othersHtml() {
 }
 
 function wireCommon(title, link) {
-  ui(() => { const s = $('#shareTop'); s.hidden = false; s.innerHTML = icon('share-2'); s.addEventListener('click', (e) => shareSheet({ link, title, from: e.currentTarget })); });
-  ui(() => $('#shareBtn').addEventListener('click', (e) => { M.bump(e.currentTarget.querySelector('.i'), 1.25); shareSheet({ link, title, from: e.currentTarget }); }));
+  const extra = { site: SITE, printable: BOOT.printable !== false };
+  ui(() => { const s = $('#shareTop'); s.hidden = false; s.innerHTML = icon('share-2'); s.addEventListener('click', (e) => shareSheet({ link, title, from: e.currentTarget, ...extra })); });
+  ui(() => $('#shareBtn').addEventListener('click', (e) => { M.bump(e.currentTarget.querySelector('.i'), 1.25); shareSheet({ link, title, from: e.currentTarget, ...extra }); }));
   ui(() => $('#qrBtn').addEventListener('click', () => qrSheet({ link, title })));
 }
 
