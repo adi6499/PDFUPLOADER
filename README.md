@@ -36,11 +36,18 @@ npm install        (only the first time: fetches the libraries)
 npm run vendor     (only after npm install: copies them into public/vendor)
 npm start          (then open http://localhost:8180)
 npm test           (checks every promise above on a throw-away copy; your documents are not touched)
+npm run password   (sets or changes the team password; needed on the real website)
 ```
+
+## Going live
+
+On the company aaPanel server, step by step: [deploy/SERVER-SETUP.md](deploy/SERVER-SETUP.md).
+On a real address the team page stays locked until a team password is set with `npm run password`
+(on this computer, with no password, it is open: nobody else can reach it).
 
 ## Settings
 
-- `config.json`: `port`, `publicUrl` (**the address printed inside every QR**; empty = this computer only,
+- `config.json`: `port`, `host`, `trustProxy` (true behind nginx), `publicUrl` (**the address printed inside every QR**; empty = this computer only,
   and the app warns you not to print), `dataDir`, `maxUploadMB`.
   Put this computer's own changes in `config.local.json` (not saved to git).
 - `site.json`: company name and the contact buttons on the scan page (phones, WhatsApp, email, website, address).

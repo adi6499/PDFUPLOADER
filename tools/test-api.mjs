@@ -5,6 +5,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { writeAuth } from '../server/auth.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
 const data = mkdtempSync(join(tmpdir(), 'jdocs-test-'));
@@ -32,6 +33,7 @@ function tinyPdf(word) {
   return Buffer.from(out, 'latin1');
 }
 
+await writeAuth(data, 'test-pass-123');
 const srv = spawn(process.execPath, [join(root, 'server', 'server.mjs')], {
   env: { ...process.env, PORT: String(PORT), HOST: '127.0.0.1', DATA_DIR: data, PUBLIC_URL: 'https://docs.example.com' },
   stdio: ['ignore', 'pipe', 'inherit'],
@@ -39,19 +41,38 @@ const srv = spawn(process.execPath, [join(root, 'server', 'server.mjs')], {
 await new Promise((res, rej) => { srv.stdout.on('data', (d) => { if (String(d).includes('running')) res(); }); srv.on('exit', () => rej(new Error('server did not start'))); });
 
 const j = async (r) => ({ status: r.status, body: await r.json().catch(() => null) });
+let COOKIE_HDR = '';
+// a request from the team screen (signed in)
+const T = (path, opts = {}) => fetch(BASE + path, { ...opts, headers: { ...(opts.headers || {}), Cookie: COOKIE_HDR } });
 try {
+  console.log('Team sign-in');
+  ok((await T(`/api/docs`)).status === 401, 'without signing in, the team list cannot be read');
+  ok((await T(`/api/docs?title=x&name=x.pdf`, { method: 'POST', headers: { 'Content-Type': 'application/pdf' }, body: tinyPdf('x') })).status === 401, 'without signing in, nothing can be uploaded');
+  ok((await (await fetch(`${BASE}/`)).text()).includes('Team password'), 'the team address shows the sign-in page');
+  let li = await fetch(`${BASE}/api/login`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password: 'wrong-one' }) });
+  ok(li.status === 401, 'a wrong password is refused');
+  li = await fetch(`${BASE}/api/login`, { method: 'POST', headers: { 'Content-Type': 'application/json', Origin: 'https://evil.example' }, body: JSON.stringify({ password: 'test-pass-123' }) });
+  ok(li.status === 403, 'another website cannot sign in for you');
+  li = await fetch(`${BASE}/api/login`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password: 'test-pass-123' }) });
+  const sc = li.headers.get('set-cookie') || '';
+  ok(li.status === 200 && /HttpOnly/.test(sc) && /Secure/.test(sc) && /SameSite=Lax/.test(sc), 'the right password gives a safe 30-day cookie');
+  COOKIE_HDR = sc.split(';')[0];
+  ok((await (await T('/')).text()).includes('id="list"'), 'signed in, the team address shows the documents screen');
+  ok((await T('/api/docs')).status === 200, 'signed in, the team list can be read');
+  ok((await fetch(`${BASE}/api/docs`, { headers: { Cookie: 'jd_team=' + (Date.now() + 9e8) + '.fake' } })).status === 401, 'a made-up cookie does not work');
+
   console.log('Upload');
-  let r = await j(await fetch(`${BASE}/api/docs?title=Test%20Catalogue&name=cat.pdf&pages=1&code=Catalogue`, { method: 'POST', headers: { 'Content-Type': 'application/pdf' }, body: tinyPdf('one') }));
+  let r = await j(await T(`/api/docs?title=Test%20Catalogue&name=cat.pdf&pages=1&code=Catalogue`, { method: 'POST', headers: { 'Content-Type': 'application/pdf' }, body: tinyPdf('one') }));
   ok(r.status === 201, 'a PDF can be uploaded with a chosen name');
   ok(r.body?.code === 'catalogue', 'the chosen name is made lower-case: catalogue');
   ok(r.body?.link === 'https://docs.example.com/c/catalogue', 'the link inside the QR is the public address + /c/catalogue');
   const link1 = r.body.link;
 
-  r = await j(await fetch(`${BASE}/api/docs?title=x&name=x.pdf`, { method: 'POST', headers: { 'Content-Type': 'application/pdf' }, body: Buffer.from('not a pdf at all') }));
+  r = await j(await T(`/api/docs?title=x&name=x.pdf`, { method: 'POST', headers: { 'Content-Type': 'application/pdf' }, body: Buffer.from('not a pdf at all') }));
   ok(r.status === 400, 'a file that is not a real PDF is refused');
-  r = await j(await fetch(`${BASE}/api/docs?title=x&name=x.pdf&code=catalogue`, { method: 'POST', headers: { 'Content-Type': 'application/pdf' }, body: tinyPdf('dup') }));
+  r = await j(await T(`/api/docs?title=x&name=x.pdf&code=catalogue`, { method: 'POST', headers: { 'Content-Type': 'application/pdf' }, body: tinyPdf('dup') }));
   ok(r.status === 409, 'a name already in use cannot be taken again');
-  r = await j(await fetch(`${BASE}/api/docs?title=Auto&name=auto.pdf`, { method: 'POST', headers: { 'Content-Type': 'application/pdf' }, body: tinyPdf('auto') }));
+  r = await j(await T(`/api/docs?title=Auto&name=auto.pdf`, { method: 'POST', headers: { 'Content-Type': 'application/pdf' }, body: tinyPdf('auto') }));
   ok(r.status === 201 && /^[2-9a-hjkmnp-z]{5}$/.test(r.body.code), 'without a chosen name, a 5-letter code with no look-alike letters is given: ' + r.body?.code);
   const auto = r.body.code;
 
@@ -65,32 +86,32 @@ try {
   ok(f1.status === 206 && (await f1.text()) === '%PDF-1.4', 'the PDF can be read in pieces (fast first page)');
 
   console.log('Replace the PDF');
-  r = await j(await fetch(`${BASE}/api/docs/catalogue/versions?name=cat-v2.pdf&pages=1`, { method: 'POST', headers: { 'Content-Type': 'application/pdf' }, body: tinyPdf('two') }));
+  r = await j(await T(`/api/docs/catalogue/versions?name=cat-v2.pdf&pages=1`, { method: 'POST', headers: { 'Content-Type': 'application/pdf' }, body: tinyPdf('two') }));
   ok(r.status === 201 && r.body.current === 2, 'a new version is added');
   ok(r.body.link === link1, 'THE LINK (AND SO THE QR) IS EXACTLY THE SAME AFTER REPLACING');
   html = await (await fetch(`${BASE}/c/catalogue`)).text();
   ok(html.includes('/f/catalogue/2/'), 'scanning now opens version 2');
   const latest = await fetch(`${BASE}/f/catalogue/latest`, { redirect: 'manual' });
   ok(latest.status === 302 && latest.headers.get('location').includes('/f/catalogue/2/'), '/f/catalogue/latest always points to the newest file');
-  r = await j(await fetch(`${BASE}/api/docs/catalogue`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ current: 1 }) }));
+  r = await j(await T(`/api/docs/catalogue`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ current: 1 }) }));
   ok(r.body.current === 1 && r.body.link === link1, 'you can switch back to version 1, same link');
 
   console.log('Counting scans');
   await fetch(`${BASE}/api/p/catalogue/scan`, { method: 'POST' });
   await fetch(`${BASE}/api/p/catalogue/scan`, { method: 'POST' });
-  r = await j(await fetch(`${BASE}/api/docs/catalogue`));
+  r = await j(await T(`/api/docs/catalogue`));
   ok(r.body.scans === 2, 'opens are counted');
 
   console.log('Archive and delete');
-  r = await j(await fetch(`${BASE}/api/docs/catalogue`, { method: 'DELETE' }));
+  r = await j(await T(`/api/docs/catalogue`, { method: 'DELETE' }));
   ok(r.status === 409, 'a live document cannot be deleted by mistake (archive first)');
-  await fetch(`${BASE}/api/docs/catalogue`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'archived' }) });
+  await T(`/api/docs/catalogue`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ status: 'archived' }) });
   html = await (await fetch(`${BASE}/c/catalogue`)).text();
   ok(html.includes('"status":"archived"'), 'an archived document shows "no longer available"');
   ok((await fetch(`${BASE}/f/catalogue/1/cat.pdf`)).status === 404, 'the file of an archived document cannot be downloaded');
-  r = await j(await fetch(`${BASE}/api/docs/catalogue`, { method: 'DELETE' }));
+  r = await j(await T(`/api/docs/catalogue`, { method: 'DELETE' }));
   ok(r.status === 200, 'an archived document can be deleted');
-  r = await j(await fetch(`${BASE}/api/check-code?code=catalogue`));
+  r = await j(await T(`/api/check-code?code=catalogue`));
   ok(r.body.ok === false, 'a deleted code is never given to another document');
   page = await fetch(`${BASE}/c/catalogue`);
   ok(page.status === 404 && (await page.text()).includes('"status":"retired"'), 'its old QR still opens a polite page, not an error');
@@ -100,6 +121,12 @@ try {
   console.log('Safety');
   ok((await fetch(`${BASE}/..%2f..%2fpackage.json`)).status === 404, 'files outside the site cannot be read');
   ok((await fetch(`${BASE}/__samples/x.pdf`)).status !== 200, 'the private test folder is closed on a real address');
+  ok((await T('/api/docs', { method: 'PATCH', headers: { 'Content-Type': 'application/json', Origin: 'https://evil.example' }, body: '{}' })).status === 403, 'another website cannot change anything, even for a signed-in person');
+  const lo = await T('/api/logout', { method: 'POST' });
+  ok(/Max-Age=0/.test(lo.headers.get('set-cookie') || ''), 'signing out removes the cookie');
+  let last = 0;
+  for (let i = 0; i < 9; i++) last = (await fetch(`${BASE}/api/login`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ password: 'guess' + i }) })).status;
+  ok(last === 429, 'after 8 wrong tries, that address must wait 15 minutes');
 } catch (e) {
   failed++; console.error(e);
 } finally {

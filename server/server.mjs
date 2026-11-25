@@ -4,34 +4,34 @@
 //   npm start            -> http://localhost:8180
 //
 // Settings: config.json (shared), config.local.json (this computer only, not in git), or environment variables
-//   PORT, HOST, PUBLIC_URL (the address printed inside every QR code), DATA_DIR, MAX_UPLOAD_MB
+//   PORT, HOST, PUBLIC_URL (the address printed inside every QR code), DATA_DIR, MAX_UPLOAD_MB, TRUST_PROXY
 import http from 'node:http';
-import { promises as fs, createReadStream, readFileSync, existsSync } from 'node:fs';
-import { join, resolve, extname, sep, dirname } from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { promises as fs, createReadStream, existsSync } from 'node:fs';
+import { join, resolve, extname, sep } from 'node:path';
 import { Store, receiveFile, readSmallBody, cleanFileName } from './store.mjs';
+import { ROOT, readJson, loadConfig } from './config.mjs';
+import { Auth, readCookie, COOKIE } from './auth.mjs';
 
-const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
 const PUBLIC = join(ROOT, 'public');
-
-// ---------- settings ----------
-function readJson(p) { try { return JSON.parse(readFileSync(p, 'utf8')); } catch { return {}; } }
-const cfg = { ...readJson(join(ROOT, 'config.json')), ...readJson(join(ROOT, 'config.local.json')) };
-const PORT = Number(process.env.PORT || cfg.port || 8180);
-const HOST = process.env.HOST || cfg.host || '127.0.0.1';
-const PUBLIC_URL = String(process.env.PUBLIC_URL || cfg.publicUrl || `http://localhost:${PORT}`).replace(/\/+$/, '');
-const DATA_DIR = resolve(ROOT, process.env.DATA_DIR || cfg.dataDir || 'data');
-const MAX_UPLOAD = Number(process.env.MAX_UPLOAD_MB || cfg.maxUploadMB || 150) * 1024 * 1024;
+const { cfg, PORT, HOST, PUBLIC_URL, DATA_DIR, MAX_UPLOAD, TRUST_PROXY, PRINTABLE, LOOPBACK } = loadConfig();
 const SITE = readJson(join(ROOT, 'site.json'));
 const VERSION = readJson(join(ROOT, 'package.json')).version || '0';
+const SECURE = PUBLIC_URL.startsWith('https://');
+const auth = new Auth(DATA_DIR);
 
-// A QR that points at this computer only works on this computer. The app warns before anyone prints one.
-const PRINTABLE = (() => {
-  try {
-    const h = new URL(PUBLIC_URL).hostname;
-    return !(h === 'localhost' || /^127\./.test(h) || h === '[::1]' || /^10\./.test(h) || /^192\.168\./.test(h) || /^172\.(1[6-9]|2\d|3[01])\./.test(h) || h.endsWith('.local'));
-  } catch { return false; }
-})();
+// Who may use the team screen:
+//  - with a team password set: only people who signed in with it
+//  - with no password yet: only on a preview address on this computer (nobody else can reach it);
+//    on a real address the team screen stays locked until a password is set (npm run password)
+const openPreview = () => !auth.passwordSet && !PRINTABLE && LOOPBACK;
+const isTeam = (req) => openPreview() || auth.checkToken(readCookie(req, COOKIE));
+const clientIp = (req) => (TRUST_PROXY && (String(req.headers['x-forwarded-for'] || '').split(',')[0].trim() || req.headers['x-real-ip'])) || req.socket.remoteAddress || '?';
+// changes may only come from our own pages (a second guard next to the SameSite cookie)
+function sameOrigin(req) {
+  const o = req.headers.origin;
+  if (!o) return true;
+  try { const u = new URL(o); return u.host === req.headers.host || u.origin === new URL(PUBLIC_URL).origin; } catch { return false; }
+}
 
 const store = new Store(DATA_DIR);
 
@@ -173,10 +173,32 @@ async function api(req, res, url, parts) {
   const q = url.searchParams;
 
   if (parts[1] === 'info' && m === 'GET') {
-    return send(res, 200, { publicUrl: PUBLIC_URL, printable: PRINTABLE, maxUploadMB: MAX_UPLOAD / 1048576, version: VERSION, site: SITE });
+    return send(res, 200, {
+      publicUrl: PUBLIC_URL, printable: PRINTABLE, maxUploadMB: MAX_UPLOAD / 1048576, version: VERSION, site: SITE,
+      auth: { passwordSet: auth.passwordSet, open: openPreview(), signedIn: isTeam(req) },
+    });
   }
+  if (parts[1] === 'health') return send(res, 200, { ok: true, version: VERSION });
+
+  if (m !== 'GET' && m !== 'HEAD' && !sameOrigin(req)) { req.resume(); return fail(res, 403, 'Not allowed from another website.'); }
+
+  if (parts[1] === 'login' && m === 'POST') {
+    const ip = clientIp(req);
+    if (auth.blocked(ip)) { req.resume(); return fail(res, 429, 'Too many wrong tries. Please wait 15 minutes and try again.'); }
+    if (!auth.passwordSet) { req.resume(); return fail(res, 409, 'No team password has been set on the server yet.'); }
+    let body = {};
+    try { body = JSON.parse((await readSmallBody(req, 4096)).toString('utf8') || '{}'); } catch {}
+    if (!auth.verify(body.password)) {
+      auth.failed(ip);
+      return fail(res, 401, auth.blocked(ip) ? 'Too many wrong tries. Please wait 15 minutes and try again.' : 'That password is not right.');
+    }
+    auth.succeeded(ip);
+    return send(res, 200, { ok: true }, { 'Set-Cookie': auth.cookie(SECURE) });
+  }
+  if (parts[1] === 'logout' && m === 'POST') return send(res, 200, { ok: true }, { 'Set-Cookie': Auth.clearCookie(SECURE) });
 
   if (parts[1] === 'check-code' && m === 'GET') {
+    if (!isTeam(req)) return fail(res, 401, 'Please sign in.');
     if (q.has('suggest')) return send(res, 200, { ok: true, code: store.newCode() });
     return send(res, 200, store.checkCode(q.get('code')));
   }
@@ -191,6 +213,7 @@ async function api(req, res, url, parts) {
   if (parts[1] !== 'docs') return fail(res, 404, 'Unknown address');
 
   // ---- below: the team's own screens ----
+  if (!isTeam(req)) { req.resume(); return fail(res, 401, 'Please sign in.'); }
   if (!parts[2]) {
     if (m === 'GET') return send(res, 200, { docs: store.list().map(teamDoc), publicUrl: PUBLIC_URL, printable: PRINTABLE });
     if (m === 'POST') {
@@ -294,6 +317,8 @@ const server = http.createServer(async (req, res) => {
     }
 
     if (req.method !== 'GET' && req.method !== 'HEAD') return fail(res, 405, 'Not allowed');
+    if (path === '/' || path === '/index.html') return await serveStatic(req, res, isTeam(req) ? '/index.html' : '/login.html');
+    if (path === '/login.html') { res.writeHead(302, { Location: '/' }); return res.end(); }
     return await serveStatic(req, res, path);
   } catch (e) {
     console.error(new Date().toISOString(), req.method, req.url, e);
@@ -307,5 +332,6 @@ await store.load();
 server.listen(PORT, HOST, () => {
   console.log(`Jinharsh Docs ${VERSION} running at http://${HOST === '0.0.0.0' ? 'localhost' : HOST}:${PORT}`);
   console.log(`QR codes point to: ${PUBLIC_URL}${PRINTABLE ? '' : '   (preview address - do not print these QR codes)'}`);
+  console.log(auth.passwordSet ? 'Team screen: password protected.' : openPreview() ? 'Team screen: open (preview on this computer only; set a password with: npm run password)' : 'Team screen: LOCKED until a team password is set (npm run password)');
 });
 for (const sig of ['SIGINT', 'SIGTERM']) process.on(sig, async () => { await store.flush().catch(() => {}); process.exit(0); });

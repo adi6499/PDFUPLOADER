@@ -2,6 +2,7 @@
 // so the cover and title show at once; the PDF pages are then drawn one by one as they come near the screen.
 import { icon } from '/vendor/icons.js';
 import { pdfjs, PDF_OPTS, fmtSize } from './pdfkit.js';
+import * as M from './motion.js';
 
 const $ = (s, el = document) => el.querySelector(s);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -83,10 +84,10 @@ function showDoc() {
     </section>
     <section class="reader" id="reader" aria-label="Pages">
       <div class="rbar ju-glass">
-        <span class="pos" id="pos">${D.pages ? `Page 1 of ${D.pages}` : 'Opening…'}</span>
+        <span class="pos" id="pos">${D.pages ? `Page <span class="rollbox"><span class="n" id="posN">1</span></span> of ${D.pages}` : 'Opening…'}</span>
         <span class="sep"></span>
         <button class="ju-icon" type="button" id="zOut" aria-label="Smaller">${icon('zoom-out')}</button>
-        <span class="zoom-val" id="zVal">100%</span>
+        <span class="zoom-val rollbox"><span class="n" id="zVal">100%</span></span>
         <button class="ju-icon" type="button" id="zIn" aria-label="Bigger">${icon('zoom-in')}</button>
         <span class="sep"></span>
         <a class="ju-icon" href="${dl}" download="${esc(D.name)}" aria-label="Download">${icon('download')}</a>
@@ -105,8 +106,11 @@ function showDoc() {
   }
   pagesEl.innerHTML = html;
 
-  $('#readBtn').addEventListener('click', () => $('#reader').scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto' : 'smooth', block: 'start' }));
-  $('#shareBtn').addEventListener('click', () => share(D.title));
+  const read = () => $('#reader').scrollIntoView({ behavior: M.calm() ? 'auto' : 'smooth', block: 'start' });
+  $('#readBtn').addEventListener('click', read);
+  ui(() => $('.v-cover img').addEventListener('click', read));
+  $('#shareBtn').addEventListener('click', (e) => { M.bump(e.currentTarget.querySelector('.i'), 1.25); share(D.title); });
+  document.querySelectorAll('a[download]').forEach((a) => a.addEventListener('click', () => M.nudgeDown(a.querySelector('.i'))));
   $('#topBtn').addEventListener('click', () => window.scrollTo({ top: 0, behavior: 'smooth' }));
   ui(() => { const s = $('#shareTop'); s.hidden = false; s.innerHTML = icon('share-2'); s.addEventListener('click', () => share(D.title)); });
 
@@ -139,7 +143,7 @@ async function startReader(pagesEl) {
     pagesEl.insertAdjacentHTML('beforeend', extra);
     while (pagesEl.children.length > n) pagesEl.lastElementChild.remove();
   }
-  $('#pos').textContent = `Page 1 of ${n}`;
+  $('#pos').innerHTML = `Page <span class="rollbox"><span class="n" id="posN">1</span></span> of ${n}`;
 
   const state = new Map(); // page number -> { canvas, width, task }
   const near = new Set();
@@ -205,7 +209,7 @@ async function startReader(pagesEl) {
   }, { rootMargin: '200% 0px 200% 0px' });
   // which page is in the middle of the screen
   const posObs = new IntersectionObserver((entries) => {
-    for (const e of entries) if (e.isIntersecting) $('#pos').textContent = `Page ${e.target.dataset.n} of ${n}`;
+    for (const e of entries) if (e.isIntersecting) M.roll($('#posN'), e.target.dataset.n);
   }, { rootMargin: '-45% 0px -45% 0px' });
   for (const el of pagesEl.children) { nearObs.observe(el); posObs.observe(el); }
 
@@ -215,8 +219,8 @@ async function startReader(pagesEl) {
   const setZoom = (k) => {
     z = Math.max(0, Math.min(steps.length - 1, k));
     pagesEl.style.setProperty('--zoom', steps[z]);
-    $('#zVal').textContent = Math.round(steps[z] * 100) + '%';
     $('#zOut').disabled = z === 0; $('#zIn').disabled = z === steps.length - 1;
+    M.roll($('#zVal'), Math.round(steps[z] * 100) + '%');
     clearTimeout(setZoom.t); setZoom.t = setTimeout(pump, 120);
   };
   $('#zIn').addEventListener('click', () => setZoom(z + 1));

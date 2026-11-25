@@ -1,0 +1,35 @@
+<!doctype html>
+<html class="ju" lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Sign in · Jinharsh Docs</title>
+  <meta name="robots" content="noindex">
+  <meta name="theme-color" content="#f4f4f6" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#0a0a0a" media="(prefers-color-scheme: dark)">
+  <link rel="icon" href="/assets/favicon-32.png" sizes="32x32">
+  <link rel="apple-touch-icon" href="/assets/apple-touch-icon.png">
+  <link rel="preload" href="/vendor/fonts/Geist-Variable.woff2" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="/vendor/jinharsh-ui.css">
+  <link rel="stylesheet" href="/css/app.css">
+  <script src="/vendor/jinharsh-ui.js"></script>
+</head>
+<body class="signin">
+  <main class="signin-wrap">
+    <form class="ju-card signin-card" id="form" autocomplete="on" novalidate>
+      <img class="signin-logo" src="/assets/mark.png" alt="Jinharsh" width="72" height="72">
+      <h1>Jinharsh Docs</h1>
+      <p class="ju-muted" id="lead">Sign in with the team password to upload PDFs and get their QR codes.</p>
+      <input type="text" name="username" value="team" autocomplete="username" hidden>
+      <label class="field">
+        <span class="sr">Team password</span>
+        <input class="ju-inp" id="pw" type="password" name="password" placeholder="Team password" autocomplete="current-password" required autofocus>
+      </label>
+      <p class="signin-msg" id="msg" role="alert"></p>
+      <button class="ju-btn accent" type="submit" id="go">Sign in</button>
+      <p class="signin-foot ju-small ju-muted">Customers who scan a QR code never need this. Only the team does.</p>
+    </form>
+  </main>
+  <script type="module" src="/js/login.js"></script>
+</body>
+</html>

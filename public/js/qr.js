@@ -13,7 +13,7 @@ export function makeQR(text, logo = false) {
   const n = qr.getModuleCount();
   // the square left free for the logo: about a fifth of the width, centred, odd number of modules
   let hole = 0;
-  if (logo) { hole = Math.round(n * 0.22); if (hole % 2 !== n % 2) hole += 1; }
+  if (logo) { hole = Math.round(n * 0.24); if (hole % 2 !== n % 2) hole += 1; }
   const h0 = (n - hole) / 2, h1 = h0 + hole;
   const dark = (r, c) => qr.isDark(r, c) && !(hole && r >= h0 && r < h1 && c >= h0 && c < h1);
   return { n, dark, hole, h0, logo };
@@ -49,7 +49,7 @@ export function qrSvg(text, { logo = false, margin = 4, logoHref = LOGO_URL, tit
   const s = q.n + margin * 2;
   let extra = '';
   if (logo) {
-    const pad = 0.55, x = q.h0 + margin + pad, w = q.hole - pad * 2;
+    const pad = 0.45, x = q.h0 + margin + pad, w = q.hole - pad * 2;
     extra = `<rect x="${q.h0 + margin + 0.2}" y="${q.h0 + margin + 0.2}" width="${q.hole - 0.4}" height="${q.hole - 0.4}" rx="${q.hole * 0.2}" fill="#fff"/>` +
       `<image href="${logoHref}" x="${x}" y="${x}" width="${w}" height="${w}" preserveAspectRatio="xMidYMid meet"/>`;
   }
@@ -77,7 +77,7 @@ export async function qrPng(text, logo, px = 2000) {
     g.fillStyle = '#fff'; g.beginPath();
     if (g.roundRect) g.roundRect(x0, x0, w0, w0, rad); else g.rect(x0, x0, w0, w0);
     g.fill();
-    const x1 = (q.h0 + margin + 0.55) * k, w1 = (q.hole - 1.1) * k;
+    const x1 = (q.h0 + margin + 0.45) * k, w1 = (q.hole - 0.9) * k;
     g.drawImage(img, x1, x1, w1, w1);
   }
   return new Promise((ok) => cv.toBlob(ok, 'image/png'));

@@ -7,6 +7,7 @@ async function call(method, url, body) {
   let r;
   try { r = await fetch(url, opt); } catch { throw new Error('Cannot reach the server. Check the internet connection.'); }
   const j = await r.json().catch(() => ({}));
+  if (r.status === 401) { location.reload(); throw new Error('Please sign in again.'); }
   if (!r.ok) throw new Error(j.error || 'Something went wrong (' + r.status + ').');
   return j;
 }
@@ -27,6 +28,7 @@ function upload(url, file, onProgress) {
     x.upload.onprogress = (e) => { if (e.lengthComputable && onProgress) onProgress(e.loaded / e.total, e.loaded, e.total); };
     x.onload = () => {
       let j = {}; try { j = JSON.parse(x.responseText); } catch {}
+      if (x.status === 401) { location.reload(); no(new Error('Please sign in again.')); return; }
       if (x.status >= 200 && x.status < 300) ok(j); else no(new Error(j.error || 'Upload failed (' + x.status + ').'));
     };
     x.onerror = () => no(new Error('The upload stopped. Check the internet connection and try again.'));
@@ -50,6 +52,7 @@ export async function putCover(code, v, blob, w, h) {
     method: 'PUT', headers: { 'Content-Type': blob.type }, body: blob,
   });
   const j = await r.json().catch(() => ({}));
+  if (r.status === 401) { location.reload(); throw new Error('Please sign in again.'); }
   if (!r.ok) throw new Error(j.error || 'Cover upload failed');
   return j;
 }

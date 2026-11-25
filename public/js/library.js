@@ -1,17 +1,20 @@
 // The team's screen: upload PDFs, see each one's permanent QR code, replace files, archive.
+// Every QR carries the Jinharsh logo in the middle.
 import { icon } from '/vendor/icons.js';
 import * as API from './api.js';
 import { qrSvg, qrSvgFile, qrPng, saveBlob } from './qr.js';
 import { inspectPdf, fmtSize } from './pdfkit.js';
+import * as M from './motion.js';
 
 const $ = (s, el = document) => el.querySelector(s);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const ui = (fn) => { try { fn(); } catch (e) { /* cosmetic: never stop the page */ } };
 const toast = (t) => ui(() => JUI.toast(t));
+const QR = (link, title) => qrSvg(link, { logo: true, title });
 
 const S = {
-  docs: [], publicUrl: '', printable: true, maxUploadMB: 150,
-  filter: 'live', query: '', open: null, logo: {}, busy: false, replaceFor: null,
+  docs: [], publicUrl: '', printable: true, maxUploadMB: 150, auth: null,
+  filter: 'live', query: '', open: null, busy: false, replaceFor: null, sheetGen: 0,
 };
 
 // ---------- dates and numbers in plain words ----------
@@ -35,12 +38,13 @@ function dayKeys(n) {
 }
 const opensIn = (d, days) => dayKeys(days).reduce((a, k) => a + ((d.scanDays || {})[k] || 0), 0);
 const shortLink = (l) => l.replace(/^https?:\/\//, '');
+const rollNum = (n) => `<span class="rollbox"><span class="n">${n}</span></span>`;
 
 // ---------- start ----------
 async function start() {
   ui(() => {
     $('#searchIcon').outerHTML = icon('search');
-    $('#dropIcon').outerHTML = icon('upload');
+    $('#dropIcon').outerHTML = icon('upload', 'bob');
     $('#uploadBtn').innerHTML = icon('upload') + 'Upload PDF';
     $('#settingsBtn').innerHTML = icon('settings');
     paintThemeBtn();
@@ -48,7 +52,7 @@ async function start() {
   wire();
   try {
     const inf = await API.info();
-    S.publicUrl = inf.publicUrl; S.printable = inf.printable; S.maxUploadMB = inf.maxUploadMB; S.version = inf.version;
+    S.publicUrl = inf.publicUrl; S.printable = inf.printable; S.maxUploadMB = inf.maxUploadMB; S.version = inf.version; S.auth = inf.auth;
   } catch (e) { toast(e.message); }
   await reload();
 }
@@ -81,10 +85,15 @@ function renderAnswer() {
   const total = S.docs.reduce((a, d) => a + (d.scans || 0), 0);
   const last = S.docs.map((d) => d.lastScanAt).filter(Boolean).sort().pop();
   const big = $('#bigFigure');
-  if (!S.docs.length) {
-    big.innerHTML = `Nothing yet<small>Upload a PDF to make your first QR code</small>`;
+  if (!S.docs.length) { big.innerHTML = `Nothing yet<small>Upload a PDF to make your first QR code</small>`; return; }
+  const sub = total ? `Opened ${plural(total, 'time', 'times')} · last ${ago(last)}` : 'No one has scanned a code yet';
+  const n = big.querySelector('.n');
+  if (n) {
+    M.roll(n, String(live.length));
+    big.querySelector('.word').textContent = live.length === 1 ? 'document' : 'documents';
+    big.querySelector('small').textContent = sub;
   } else {
-    big.innerHTML = `${plural(live.length, 'document', 'documents')} live<small>${total ? `Opened ${plural(total, 'time', 'times')} · last ${ago(last)}` : 'No one has scanned a code yet'}</small>`;
+    big.innerHTML = `${rollNum(live.length)} <span class="word">${live.length === 1 ? 'document' : 'documents'}</span> live<small>${sub}</small>`;
   }
 }
 
@@ -99,8 +108,18 @@ function renderTiles() {
     ['fresh', fresh.length, 'Updated', 'in the last 30 days'],
     ['archived', arch.length, 'Archived', 'hidden from scans'],
   ];
-  $('#tiles').innerHTML = tiles.map(([k, n, label, sub]) =>
-    `<button type="button" class="ju-tile${S.filter === k ? ' on' : ''}" data-filter="${k}" aria-pressed="${S.filter === k}"><b>${nf(n)}</b><span>${label}</span><small>${sub}</small></button>`).join('');
+  const box = $('#tiles');
+  if (box.children.length === tiles.length) {
+    // already drawn: roll the numbers that changed, move the "chosen" ring
+    tiles.forEach(([k, n], i) => {
+      const t = box.children[i];
+      M.roll(t.querySelector('.n'), nf(n));
+      t.classList.toggle('on', S.filter === k); t.setAttribute('aria-pressed', S.filter === k);
+    });
+    return;
+  }
+  box.innerHTML = tiles.map(([k, n, label, sub]) =>
+    `<button type="button" class="ju-tile${S.filter === k ? ' on' : ''}" data-filter="${k}" aria-pressed="${S.filter === k}"><b>${rollNum(nf(n))}</b><span>${label}</span><small>${sub}</small></button>`).join('');
 }
 
 function visibleDocs() {
@@ -141,7 +160,7 @@ function rowHtml(d) {
       <div class="thumb">${cover}</div>
       <div class="grow"><b>${esc(d.title)}</b><small>${bits}</small></div>
       <span class="ju-pill opens-pill opens">${plural(d.scans || 0, 'open', 'opens')}</span>
-      <div class="mini-qr">${qrSvg(d.link)}</div>
+      <div class="mini-qr">${QR(d.link)}</div>
       <span class="chev">${icon('chevron-down')}</span>
     </div>
     <div class="more"><div class="more-in">${detailHtml(d)}</div></div>
@@ -149,7 +168,6 @@ function rowHtml(d) {
 }
 
 function detailHtml(d) {
-  const logo = !!S.logo[d.code];
   const archived = d.status === 'archived';
   const days = dayKeys(14), counts = days.map((k) => (d.scanDays || {})[k] || 0), max = Math.max(1, ...counts);
   const bars = counts.map((c, i) => `<i class="${c ? 'on' : ''}" style="height:${Math.max(6, Math.round((c / max) * 100))}%" title="${days[i]}: ${c}"></i>`).join('');
@@ -162,11 +180,7 @@ function detailHtml(d) {
     </div>`).join('');
   return `<div class="detail">
     <div class="qr-col">
-      <div class="qr-tile">${qrSvg(d.link, { logo, title: d.title })}</div>
-      <div class="ju-seg" role="group" aria-label="QR style" style="align-self:center">
-        <button type="button" class="${logo ? '' : 'on'}" data-act="logo" data-v="0">Plain</button>
-        <button type="button" class="${logo ? 'on' : ''}" data-act="logo" data-v="1">With logo</button>
-      </div>
+      <div class="qr-tile big-qr">${QR(d.link, d.title)}</div>
       <div class="lock"${S.printable ? '' : ' style="color:var(--warn)"'}>${icon(S.printable ? 'lock' : 'circle-alert')}${S.printable ? 'Permanent. This QR never changes.' : 'Preview code. Final once the site is online.'}</div>
     </div>
     <div class="info-col">
@@ -197,27 +211,33 @@ function detailHtml(d) {
 }
 
 const docOf = (code) => S.docs.find((d) => d.code === code);
+const rowEl = (code) => document.querySelector(`#list .doc[data-code="${CSS.escape(code)}"]`);
 function putDoc(doc) {
   const i = S.docs.findIndex((d) => d.code === doc.code);
   if (i >= 0) S.docs[i] = doc; else S.docs.unshift(doc);
 }
 
-// ---------- opening a row in place ----------
+// ---------- opening a row in place: the small QR grows into the big one ----------
 function toggle(code) {
   const was = S.open;
   S.open = was === code ? null : code;
   document.querySelectorAll('#list .doc').forEach((el) => {
     const on = el.dataset.code === S.open;
-    if (on && !el.classList.contains('open')) { el.classList.add('opening'); setTimeout(() => el.classList.remove('opening'), 600); }
+    const opening = on && !el.classList.contains('open');
+    const from = opening ? el.querySelector('.mini-qr')?.getBoundingClientRect() : null;
+    if (opening) { el.classList.add('opening'); setTimeout(() => el.classList.remove('opening'), 700); }
     el.classList.toggle('open', on);
     el.querySelector('.ju-row')?.setAttribute('aria-expanded', on);
+    if (opening && from && from.width) M.fly(from, el.querySelector('.big-qr'), { spring: 'gentle', radiusFrom: 8 });
   });
 }
 
-// ---------- the sheet (pop-up card over a blurred veil) ----------
+// ---------- the sheet (a card over a blurred veil) ----------
 function openSheet(html, { wide = false, locked = false } = {}) {
+  S.sheetGen++;
   const sh = $('#sheet');
   sh.className = 'ju-sheet' + (wide ? ' wide' : '');
+  sh.style.visibility = '';
   sh.onclick = null;
   sh.innerHTML = html;
   $('#overlay').hidden = false;
@@ -226,12 +246,22 @@ function openSheet(html, { wide = false, locked = false } = {}) {
   setTimeout(() => { const f = sh.querySelector('[autofocus]'); if (f && matchMedia('(pointer:fine)').matches) f.focus(); }, 60);
   return sh;
 }
-function closeSheet(force) {
+// quiet = the sheet's content has just flown away somewhere; only the veil clears
+function closeSheet(force, { quiet = false } = {}) {
   if (S.sheetLocked && !force) return;
-  $('#overlay').hidden = true; $('#sheet').innerHTML = '';
-  document.body.style.overflow = '';
+  const gen = ++S.sheetGen;
+  const sh = $('#sheet'), ov = $('#overlay');
   S.sheetLocked = false;
+  document.body.style.overflow = '';
   if (S.sheetResolve) { const r = S.sheetResolve; S.sheetResolve = null; r('closed'); }
+  if (quiet) sh.style.visibility = 'hidden';
+  const anim = quiet ? M.play(ov, [{ opacity: 1 }, { opacity: 0 }], { duration: 240, easing: 'ease-in' }) : M.leave(sh, ov);
+  ov.style.pointerEvents = 'none';
+  anim.then(() => {
+    ov.style.pointerEvents = '';
+    if (gen !== S.sheetGen) return; // a new sheet opened meanwhile
+    ov.hidden = true; sh.innerHTML = ''; sh.style.visibility = '';
+  });
 }
 const closeBtn = () => `<button class="ju-icon close-x" type="button" data-sheet="close" aria-label="Close">${icon('x')}</button>`;
 
@@ -284,7 +314,7 @@ function uploadOne(file, idx, count) {
     fTitle.value = file.name.replace(/\.pdf$/i, '');
     fTitle.addEventListener('input', () => { titleTouched = true; });
 
-    const paintQR = () => { $('#qrPrev', sh).innerHTML = qrSvg(S.publicUrl + '/c/' + (chosen || suggested)); };
+    const paintQR = () => { $('#qrPrev', sh).innerHTML = QR(S.publicUrl + '/c/' + (chosen || suggested)); };
     paintQR();
     let t = 0, seq = 0;
     fCode.addEventListener('input', () => {
@@ -301,11 +331,12 @@ function uploadOne(file, idx, count) {
           codeOk = r.ok;
           msg.className = r.ok ? 'good' : 'bad';
           msg.textContent = r.ok ? 'Free to use. It can’t be changed later.' : r.reason;
+          if (!r.ok) M.shake(fCode.closest('.prefixed'));
         } catch {}
       }, 250);
     });
 
-    // read the PDF: page count, title, cover picture
+    // read the PDF: page count, title, cover picture (the cover settles into its frame)
     let info = null;
     const inspecting = inspectPdf(file).then((r) => {
       info = r;
@@ -315,6 +346,7 @@ function uploadOne(file, idx, count) {
         r.canvas.setAttribute('aria-label', 'First page');
         box.appendChild(r.canvas);
         box.insertAdjacentHTML('beforeend', `<span class="pages">${plural(r.pages, 'page', 'pages')}</span>`);
+        M.play(r.canvas, [{ transform: 'scale(1.06)' }, { transform: 'none' }], { duration: M.SPRING.smooth.duration, easing: M.SPRING.smooth.easing });
       }
       if (!titleTouched) fTitle.value = r.title;
     }).catch(() => {
@@ -327,13 +359,15 @@ function uploadOne(file, idx, count) {
     };
 
     $('#goBtn', sh).addEventListener('click', async () => {
-      if (!codeOk) { fCode.focus(); return; }
+      if (!codeOk) { fCode.focus(); M.shake(fCode.closest('.prefixed')); return; }
       const title = fTitle.value.trim();
-      if (!title) { fTitle.focus(); return; }
+      if (!title) { fTitle.focus(); M.shake(fTitle); return; }
       S.busy = true; S.sheetLocked = true;
       fTitle.disabled = fCode.disabled = true;
       const stage = $('#stage', sh);
-      stage.innerHTML = `<div class="progress"><div class="ju-bar"><i id="pBar" style="width:0%"></i></div><div class="row"><span id="pWhat">Reading the PDF…</span><span id="pNum"></span></div></div>`;
+      M.resize(sh, () => {
+        stage.innerHTML = `<div class="progress"><div class="ju-bar"><i id="pBar" style="width:0%"></i></div><div class="row"><span id="pWhat">Reading the PDF…</span><span id="pNum"></span></div></div>`;
+      });
       try {
         await inspecting;
         $('#pWhat', sh).textContent = 'Uploading…';
@@ -351,35 +385,58 @@ function uploadOne(file, idx, count) {
       } catch (err) {
         S.sheetLocked = false;
         fTitle.disabled = fCode.disabled = false;
-        stage.innerHTML = `<p class="field"><small class="bad">${esc(err.message)}</small></p><div class="sheet-foot"><button class="ju-btn ghost" type="button" data-sheet="close">Cancel</button><button class="ju-btn accent" type="button" id="goBtn2">${icon('refresh-cw')}Try again</button></div>`;
+        M.resize(sh, () => {
+          stage.innerHTML = `<p class="field"><small class="bad">${esc(err.message)}</small></p><div class="sheet-foot"><button class="ju-btn ghost" type="button" data-sheet="close">Cancel</button><button class="ju-btn accent" type="button" id="goBtn2">${icon('refresh-cw')}Try again</button></div>`;
+        });
         $('#goBtn2', sh).addEventListener('click', () => { S.sheetResolve = null; closeSheet(true); uploadOne(file, idx, count).then(resolveAll); });
       } finally { S.busy = false; }
     });
   });
 }
 
+// The finished QR: the small preview grows into the big one, then (on "Done") flies into its row.
 function showDone(sh, doc, idx, count, resolveAll) {
   S.sheetLocked = false;
   const more = count > 1 && idx < count - 1;
-  sh.innerHTML = `${closeBtn()}
-    <div class="done">
-      <div class="tick">${icon('circle-check')}Uploaded</div>
-      <h2>Your QR code is ready</h2>
-      <p class="sub">${esc(doc.title)}${S.printable ? '' : ' · preview code, print it once the site is online'}</p>
-      <div class="qr-tile">${qrSvg(doc.link, { title: doc.title })}</div>
-      <div class="linkline"><a href="/c/${esc(doc.code)}?preview=1" target="_blank" rel="noopener">${esc(shortLink(doc.link))}</a><button class="ju-icon" type="button" data-copy="${esc(doc.link)}" aria-label="Copy link">${icon('copy')}</button></div>
-      <div class="btns">
-        <button class="ju-btn primary" type="button" data-dl="svg">${icon('download')}QR for printing (SVG)</button>
-        <button class="ju-btn" type="button" data-dl="png">${icon('image')}PNG</button>
-        <button class="ju-btn" type="button" data-sheet="${more ? 'next' : 'close'}">${more ? 'Next file' : 'Done'}</button>
-      </div>
-    </div>`;
+  const from = $('#qrPrev', sh)?.getBoundingClientRect();
+  M.resize(sh, () => {
+    sh.innerHTML = `${closeBtn()}
+      <div class="done">
+        <div class="tick">${icon('circle-check')}Uploaded</div>
+        <h2>Your QR code is ready</h2>
+        <p class="sub">${esc(doc.title)}${S.printable ? '' : ' · preview code, print it once the site is online'}</p>
+        <div class="qr-tile" id="doneQr">${QR(doc.link, doc.title)}</div>
+        <div class="linkline"><a href="/c/${esc(doc.code)}?preview=1" target="_blank" rel="noopener">${esc(shortLink(doc.link))}</a><button class="ju-icon" type="button" data-copy="${esc(doc.link)}" aria-label="Copy link">${icon('copy')}</button></div>
+        <div class="btns">
+          <button class="ju-btn primary" type="button" data-dl="svg">${icon('download')}QR for printing (SVG)</button>
+          <button class="ju-btn" type="button" data-dl="png">${icon('image')}PNG</button>
+          <button class="ju-btn" type="button" data-sheet="done">${more ? 'Next file' : 'Done'}</button>
+        </div>
+      </div>`;
+  }, 'gentle');
+  const tile = $('#doneQr', sh);
+  if (from && from.width) M.fly(from, tile, { spring: 'bouncy', radiusFrom: 14 }); else M.bump(tile, 1.06);
+  ui(() => M.bump($('.done .tick', sh), 1.12));
+
+  const finish = (next) => {
+    // the QR flies from the sheet into its row in the list
+    const r = $('#doneQr', sh)?.getBoundingClientRect();
+    sh.onclick = null; S.sheetResolve = null;
+    closeSheet(true, { quiet: true });
+    const row = rowEl(doc.code);
+    const target = row?.querySelector('.big-qr');
+    if (row && target && r) {
+      target.scrollIntoView({ block: 'center' });
+      M.fly(r, target, { spring: 'gentle', radiusFrom: 22 });
+    }
+    resolveAll(next);
+  };
   sh.onclick = (e) => {
     const dl = e.target.closest('[data-dl]');
-    if (dl) downloadQR(doc, dl.dataset.dl, false);
+    if (dl) { ui(() => M.nudgeDown(dl.querySelector('.i'))); downloadQR(doc, dl.dataset.dl); }
     const cp = e.target.closest('[data-copy]');
-    if (cp) copyLink(cp.dataset.copy);
-    if (e.target.closest('[data-sheet="next"]')) { sh.onclick = null; S.sheetResolve = null; closeSheet(true); resolveAll('next'); }
+    if (cp) copyLink(cp.dataset.copy, cp);
+    if (e.target.closest('[data-sheet="done"]')) finish('next');
   };
   S.sheetResolve = () => { sh.onclick = null; resolveAll('next'); };
 }
@@ -393,7 +450,7 @@ async function startReplace(file) {
   const sh = openSheet(`${closeBtn()}
     <div class="sheet-head"><div class="grow"><h2>Replace the PDF</h2><p>${esc(d.title)}</p></div></div>
     <div class="swap">
-      <div><div class="cover-box">${d.live.cover ? `<img src="${d.live.cover}" alt="">` : icon('file-text')}</div><div class="cap">Now · v${d.current}</div></div>
+      <div><div class="cover-box" id="oldCover">${d.live.cover ? `<img src="${d.live.cover}" alt="">` : icon('file-text')}</div><div class="cap">Now · v${d.current}</div></div>
       <div class="arrow">${icon('arrow-left')}</div>
       <div><div class="cover-box" id="newCover">${icon('file-text')}</div><div class="cap">New · ${esc(file.name)}</div></div>
     </div>
@@ -403,12 +460,17 @@ async function startReplace(file) {
   let info = null;
   const inspecting = inspectPdf(file).then((r) => {
     info = r; const box = $('#newCover', sh);
-    if (box) { box.innerHTML = ''; box.appendChild(r.canvas); box.insertAdjacentHTML('beforeend', `<span class="pages">${plural(r.pages, 'page', 'pages')}</span>`); }
+    if (box) {
+      box.innerHTML = ''; box.appendChild(r.canvas); box.insertAdjacentHTML('beforeend', `<span class="pages">${plural(r.pages, 'page', 'pages')}</span>`);
+      M.play(box, [{ transform: 'translateX(-14px) rotate(-1.5deg)' }, { transform: 'none' }], { duration: M.SPRING.gentle.duration, easing: M.SPRING.gentle.easing });
+    }
   }).catch(() => {});
   $('#goBtn', sh).addEventListener('click', async () => {
     S.busy = true; S.sheetLocked = true;
     const stage = $('#stage', sh);
-    stage.innerHTML = `<div class="progress"><div class="ju-bar"><i id="pBar" style="width:0%"></i></div><div class="row"><span id="pWhat">Uploading…</span><span id="pNum"></span></div></div>`;
+    M.resize(sh, () => {
+      stage.innerHTML = `<div class="progress"><div class="ju-bar"><i id="pBar" style="width:0%"></i></div><div class="row"><span id="pWhat">Uploading…</span><span id="pNum"></span></div></div>`;
+    });
     try {
       await inspecting;
       let doc = await API.addVersion(d.code, file, { pages: info?.pages }, (p, a, b) => {
@@ -416,34 +478,47 @@ async function startReplace(file) {
         $('#pNum', sh).textContent = `${fmtSize(a)} of ${fmtSize(b)}`;
       });
       if (info?.cover) { try { doc = await API.putCover(doc.code, doc.current, info.cover, info.coverW, info.coverH); } catch {} }
+      // the new cover slides over the old one, then everything settles
+      const nb = $('#newCover', sh), ob = $('#oldCover', sh);
+      if (nb && ob) await M.play(nb, [{ transform: 'none' }, { transform: `translateX(${ob.getBoundingClientRect().left - nb.getBoundingClientRect().left}px)` }], { duration: 420, easing: 'cubic-bezier(.5,0,.2,1)', fill: 'forwards' });
       putDoc(doc); S.open = doc.code;
       closeSheet(true); render();
+      ui(() => M.bump(rowEl(doc.code)?.querySelector('.thumb'), 1.12));
       toast('Replaced. Same QR, new PDF.');
     } catch (err) {
       S.sheetLocked = false;
-      stage.innerHTML = `<p class="field"><small class="bad">${esc(err.message)}</small></p><div class="sheet-foot"><button class="ju-btn ghost" type="button" data-sheet="close">Close</button></div>`;
+      M.resize(sh, () => {
+        stage.innerHTML = `<p class="field"><small class="bad">${esc(err.message)}</small></p><div class="sheet-foot"><button class="ju-btn ghost" type="button" data-sheet="close">Close</button></div>`;
+      });
     } finally { S.busy = false; }
   });
 }
 
 // ---------- small actions ----------
-async function copyLink(link) {
-  try { await navigator.clipboard.writeText(link); toast('Link copied'); }
-  catch { window.prompt('Copy this link:', link); }
+async function copyLink(link, btn) {
+  try {
+    await navigator.clipboard.writeText(link);
+    toast('Link copied');
+    if (btn) {
+      const was = btn.innerHTML;
+      btn.innerHTML = icon('check'); btn.style.color = 'var(--ok)'; M.bump(btn, 1.2);
+      setTimeout(() => { btn.innerHTML = was; btn.style.color = ''; }, 1500);
+    }
+  } catch { window.prompt('Copy this link:', link); }
 }
 
 function fileBase(d) { return `QR ${d.title} (${d.code})`.replace(/[\\/:*?"<>|]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 100); }
 
-async function downloadQR(d, kind, logo) {
+async function downloadQR(d, kind) {
   try {
-    if (kind === 'svg') saveBlob(new Blob([await qrSvgFile(d.link, logo)], { type: 'image/svg+xml' }), fileBase(d) + '.svg');
-    else saveBlob(await qrPng(d.link, logo, 2000), fileBase(d) + '.png');
+    if (kind === 'svg') saveBlob(new Blob([await qrSvgFile(d.link, true)], { type: 'image/svg+xml' }), fileBase(d) + '.svg');
+    else saveBlob(await qrPng(d.link, true, 2000), fileBase(d) + '.png');
     toast(kind === 'svg' ? 'SVG saved: best for printing' : 'PNG saved');
   } catch { toast('Could not make the file. Please try again.'); }
 }
 
-function printQR(d, logo) {
-  $('#printArea').innerHTML = `<div class="qr">${qrSvg(d.link, { logo, title: d.title })}</div><h1>${esc(d.title)}</h1><p>${esc(shortLink(d.link))}</p>`;
+function printQR(d) {
+  $('#printArea').innerHTML = `<div class="qr">${QR(d.link, d.title)}</div><h1>${esc(d.title)}</h1><p>${esc(shortLink(d.link))}</p>`;
   setTimeout(() => window.print(), 80);
 }
 
@@ -453,7 +528,7 @@ function renameSheet(d) {
     <label class="field"><span>Name people will see</span><input class="ju-inp" id="rnTitle" maxlength="140" value="${esc(d.title)}" autofocus autocomplete="off"></label>
     <div class="sheet-foot"><button class="ju-btn ghost" type="button" data-sheet="close">Cancel</button><button class="ju-btn primary" type="button" id="rnSave">Save</button></div>`);
   const go = async () => {
-    const t = $('#rnTitle', sh).value.trim(); if (!t) return;
+    const t = $('#rnTitle', sh).value.trim(); if (!t) { M.shake($('#rnTitle', sh)); return; }
     try { putDoc(await API.updateDoc(d.code, { title: t })); closeSheet(true); render(); toast('Renamed'); }
     catch (e) { toast(e.message); }
   };
@@ -461,13 +536,19 @@ function renameSheet(d) {
   $('#rnTitle', sh).addEventListener('keydown', (e) => { if (e.key === 'Enter') go(); });
 }
 
-function confirmSheet({ title, text, yes, onYes }) {
+// leaving = the code of a row that will disappear from this list (it slides away first)
+function confirmSheet({ title, text, yes, onYes, leaving = null }) {
   const sh = openSheet(`${closeBtn()}
     <div class="sheet-head"><div class="grow"><h2>${title}</h2><p>${text}</p></div></div>
     <div class="sheet-foot"><button class="ju-btn ghost" type="button" data-sheet="close">Cancel</button><button class="ju-btn primary" type="button" id="cfYes">${yes}</button></div>`);
   $('#cfYes', sh).addEventListener('click', async () => {
     $('#cfYes', sh).disabled = true;
-    try { await onYes(); closeSheet(true); render(); } catch (e) { toast(e.message); $('#cfYes', sh).disabled = false; }
+    try {
+      await onYes();
+      closeSheet(true);
+      if (leaving && rowEl(leaving)) await M.slideAway(rowEl(leaving));
+      render();
+    } catch (e) { toast(e.message); $('#cfYes', sh).disabled = false; M.shake(sh); }
   });
 }
 
@@ -475,21 +556,26 @@ function settingsSheet() {
   let mode = 'auto'; try { mode = localStorage.getItem('jui_dark') || 'auto'; } catch {}
   if (mode === '1') mode = 'dark'; else if (mode === '0') mode = 'light';
   const glass = (() => { try { return +(localStorage.getItem('jui_glass') ?? 100); } catch { return 100; } })();
+  const signedIn = S.auth && S.auth.passwordSet;
   const sh = openSheet(`${closeBtn()}
     <div class="sheet-head"><div class="grow"><h2>Settings</h2><p>These choices are kept on this device.</p></div></div>
     <div class="setting"><div class="grow"><b>Appearance</b><small>Auto follows this device</small></div>
       <div class="ju-seg" id="setMode">${['auto', 'light', 'dark'].map((m) => `<button type="button" data-m="${m}" class="${mode === m ? 'on' : ''}">${m[0].toUpperCase() + m.slice(1)}</button>`).join('')}</div></div>
     <div class="setting"><div class="grow"><b>Glass</b><small>0 solid · 30 frosted · 100 clear</small></div><input type="range" min="0" max="100" value="${glass}" id="setGlass" aria-label="Glass"></div>
     <div class="setting"><div class="grow"><b>Address inside every QR code</b><small class="mono">${esc(S.publicUrl)}</small><br><small>${S.printable ? 'This is the real address. Codes are final.' : 'Preview address. Codes become final once the site is online.'}</small></div></div>
+    <div class="setting"><div class="grow"><b>Team sign-in</b><small>${signedIn ? 'Signed in on this device for 30 days.' : 'No team password yet: open only on this computer.'}</small></div>${signedIn ? '<button class="ju-btn sm" type="button" id="signOut">Sign out</button>' : ''}</div>
     <div class="setting"><div class="grow"><b>Jinharsh Docs</b><small>Version ${esc(S.version || '')} · up to ${S.maxUploadMB} MB per PDF</small></div></div>`);
   $('#setMode', sh).addEventListener('click', (e) => {
     const b = e.target.closest('button[data-m]'); if (!b) return;
-    const m = b.dataset.m;
-    ui(() => JUI.setDark(m === 'auto' ? 'auto' : m === 'dark'));
+    const m = b.dataset.m, r = b.getBoundingClientRect();
+    M.themeSwitch(r.left + r.width / 2, r.top + r.height / 2, () => { ui(() => JUI.setDark(m === 'auto' ? 'auto' : m === 'dark')); paintThemeBtn(); });
     sh.querySelectorAll('#setMode button').forEach((x) => x.classList.toggle('on', x === b));
-    paintThemeBtn();
   });
   $('#setGlass', sh).addEventListener('input', (e) => ui(() => JUI.setGlass(e.target.value)));
+  $('#signOut', sh)?.addEventListener('click', async () => {
+    try { await fetch('/api/logout', { method: 'POST' }); } catch {}
+    location.replace('/');
+  });
 }
 
 function paintThemeBtn() {
@@ -504,9 +590,12 @@ function wire() {
   $('#fileInput').addEventListener('change', (e) => { const f = [...e.target.files]; e.target.value = ''; startUpload(f); });
   $('#replaceInput').addEventListener('change', (e) => { const f = e.target.files[0]; e.target.value = ''; startReplace(f); });
   $('#settingsBtn').addEventListener('click', settingsSheet);
-  $('#themeBtn').addEventListener('click', () => {
-    ui(() => JUI.setDark(!document.documentElement.classList.contains('dark')));
-    paintThemeBtn();
+  $('#themeBtn').addEventListener('click', (e) => {
+    const r = e.currentTarget.getBoundingClientRect();
+    M.themeSwitch(r.left + r.width / 2, r.top + r.height / 2, () => {
+      ui(() => JUI.setDark(!document.documentElement.classList.contains('dark')));
+      paintThemeBtn();
+    });
   });
   $('#search').addEventListener('input', (e) => { S.query = e.target.value; renderList(); });
   $('#tiles').addEventListener('click', (e) => {
@@ -529,16 +618,9 @@ function wire() {
     if (act === 'show-live') { S.filter = 'live'; S.query = ''; $('#search').value = ''; renderTiles(); renderList(); return; }
     const code = el.closest('.doc')?.dataset.code; const d = docOf(code); if (!d) return;
     if (act === 'toggle') return toggle(code);
-    if (act === 'logo') {
-      S.logo[code] = el.dataset.v === '1';
-      const box = el.closest('.qr-col');
-      box.querySelector('.qr-tile').innerHTML = qrSvg(d.link, { logo: S.logo[code], title: d.title });
-      box.querySelectorAll('[data-act="logo"]').forEach((b) => b.classList.toggle('on', b === el));
-      return;
-    }
-    if (act === 'copy') return copyLink(d.link);
-    if (act === 'svg' || act === 'png') return downloadQR(d, act, !!S.logo[code]);
-    if (act === 'print') return printQR(d, !!S.logo[code]);
+    if (act === 'copy') return copyLink(d.link, el);
+    if (act === 'svg' || act === 'png') { ui(() => M.nudgeDown(el.querySelector('.i'))); return downloadQR(d, act); }
+    if (act === 'print') return printQR(d);
     if (act === 'replace') { S.replaceFor = code; $('#replaceInput').click(); return; }
     if (act === 'rename') return renameSheet(d);
     if (act === 'use-version') {
@@ -550,12 +632,18 @@ function wire() {
     }
     if (act === 'archive') return confirmSheet({
       title: `Archive “${esc(d.title)}”?`, text: 'Anyone who scans its QR will see “no longer available” with your contact details. Nothing is deleted, and you can bring it back any time.', yes: 'Archive',
-      onYes: async () => { putDoc(await API.updateDoc(code, { status: 'archived' })); S.open = null; },
+      leaving: code, onYes: async () => { putDoc(await API.updateDoc(code, { status: 'archived' })); S.open = null; },
     });
-    if (act === 'restore') return (async () => { try { putDoc(await API.updateDoc(code, { status: 'live' })); S.filter = 'live'; render(); toast('Back on. The QR works again.'); } catch (er) { toast(er.message); } })();
+    if (act === 'restore') return (async () => {
+      try {
+        putDoc(await API.updateDoc(code, { status: 'live' }));
+        await M.slideAway(rowEl(code));
+        S.filter = 'live'; render(); toast('Back on. The QR works again.');
+      } catch (er) { toast(er.message); }
+    })();
     if (act === 'delete') return confirmSheet({
       title: `Delete “${esc(d.title)}” for good?`, text: 'The PDF and all its versions are removed from the server and cannot be brought back. Its QR will show “no longer available”. The code is never given to another document.', yes: 'Delete for good',
-      onYes: async () => { await API.deleteDoc(code); S.docs = S.docs.filter((x) => x.code !== code); S.open = null; },
+      leaving: code, onYes: async () => { await API.deleteDoc(code); S.docs = S.docs.filter((x) => x.code !== code); S.open = null; },
     });
   });
   list.addEventListener('keydown', (e) => {
