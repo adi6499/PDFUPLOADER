@@ -37,6 +37,8 @@
 .notice p { margin: 2px 0 0; color: var(--text); opacity: .8; }
 
 /* ---------- the answer card (dark hero) ---------- */
+.notice-card { padding: 6px; margin-bottom: 14px; }
+.notice-card .notice p { line-height: 1.6; }
 .answer { display: grid; grid-template-columns: 1fr auto; gap: 18px 28px; align-items: end; margin-bottom: 14px; }
 .answer .eyebrow { font-size: 12px; font-weight: 650; text-transform: uppercase; letter-spacing: .09em; opacity: .62; }
 .answer .big { font-size: 46px; font-weight: 800; letter-spacing: -.045em; line-height: 1.02; margin-top: 10px; }

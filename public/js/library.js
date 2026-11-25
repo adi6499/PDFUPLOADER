@@ -52,9 +52,24 @@ async function start() {
   wire();
   try {
     const inf = await API.info();
+    if (!inf || !inf.publicUrl) throw new Error('no program');
     S.publicUrl = inf.publicUrl; S.printable = inf.printable; S.maxUploadMB = inf.maxUploadMB; S.version = inf.version; S.auth = inf.auth;
-  } catch (e) { toast(e.message); }
+  } catch (e) { return offline(); }
   await reload();
+}
+
+// The page was opened from somewhere that only shows the files (a plain web host, or a copy of the folder),
+// not from the Jinharsh Docs program. Say so plainly instead of letting an upload fail at the end.
+function offline() {
+  S.offline = true;
+  const here = location.origin.startsWith('http') ? location.host : 'a file on this computer';
+  $('#previewWarn').hidden = true;
+  $('#answer').outerHTML = `<section class="ju-card notice-card"><div class="notice warn" style="margin:0">${icon('circle-alert')}<div>
+    <b>This page is not connected to the Jinharsh Docs program, so nothing can be uploaded here.</b>
+    <p>It was opened from <span class="mono">${esc(here)}</span>, which only shows the page. Open <span class="mono">http://localhost:8180</span> on this computer
+    (start it with <span class="mono">npm start</span> in the JINHARSH-DOCS folder), or <span class="mono">https://docs.jinharsh.com</span> once it is online.</p></div></div></section>`;
+  $('#tiles').innerHTML = '';
+  $('#list').innerHTML = `<div class="empty"><div class="art">${icon('circle-alert')}</div><h3>Not connected</h3><p>Your documents and their QR codes show up here when the page is opened from the program.</p></div>`;
 }
 
 async function reload() {
@@ -269,6 +284,7 @@ const closeBtn = () => `<button class="ju-icon close-x" type="button" data-sheet
 function pickFiles() { $('#fileInput').value = ''; $('#fileInput').click(); }
 
 async function startUpload(files) {
+  if (S.offline || !S.publicUrl) { toast('Not connected: open the page from the Jinharsh Docs program first.'); return; }
   const pdfs = [...files].filter((f) => f.type === 'application/pdf' || /\.pdf$/i.test(f.name));
   if (!pdfs.length) { toast('Only PDF files can be uploaded.'); return; }
   if (S.busy) { toast('Please wait for the current upload to finish.'); return; }

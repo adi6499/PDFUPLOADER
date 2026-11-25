@@ -6,7 +6,8 @@ async function call(method, url, body) {
   if (body !== undefined) { opt.headers['Content-Type'] = 'application/json'; opt.body = JSON.stringify(body); }
   let r;
   try { r = await fetch(url, opt); } catch { throw new Error('Cannot reach the server. Check the internet connection.'); }
-  const j = await r.json().catch(() => ({}));
+  const j = await r.json().catch(() => null);
+  if (j === null) throw new Error('This page is not connected to the Jinharsh Docs program.');
   if (r.status === 401) { location.reload(); throw new Error('Please sign in again.'); }
   if (!r.ok) throw new Error(j.error || 'Something went wrong (' + r.status + ').');
   return j;
@@ -29,7 +30,9 @@ function upload(url, file, onProgress) {
     x.onload = () => {
       let j = {}; try { j = JSON.parse(x.responseText); } catch {}
       if (x.status === 401) { location.reload(); no(new Error('Please sign in again.')); return; }
-      if (x.status >= 200 && x.status < 300) ok(j); else no(new Error(j.error || 'Upload failed (' + x.status + ').'));
+      if (x.status >= 200 && x.status < 300) ok(j);
+      else if (!j.error && (x.status === 404 || x.status === 405)) no(new Error('This page is not connected to the Jinharsh Docs program, so the file could not be saved. Open http://localhost:8180 (or docs.jinharsh.com once it is online) and try again.'));
+      else no(new Error(j.error || 'Upload failed (' + x.status + ').'));
     };
     x.onerror = () => no(new Error('The upload stopped. Check the internet connection and try again.'));
     x.send(file);
