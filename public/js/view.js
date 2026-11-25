@@ -4,6 +4,7 @@ import { icon } from '/vendor/icons.js';
 import { pdfjs, PDF_OPTS, fmtSize } from './pdfkit.js';
 import * as M from './motion.js';
 import { esc, ui, contactHtml, share, qrSheet, blankCover } from './site.js';
+import { bindImage } from './particles.js';
 
 const $ = (s, el = document) => el.querySelector(s);
 
@@ -98,36 +99,16 @@ function showDoc() {
         </div>
       </div>
     </section>
-    <section class="reader" id="reader" aria-label="Pages">
-      <div class="rbar ju-glass">
-        <span class="pos" id="pos">${D.pages ? `Page <span class="rollbox"><span class="n" id="posN">1</span></span> of ${D.pages}` : 'Opening…'}</span>
-        <span class="sep"></span>
-        <button class="ju-icon" type="button" id="zOut" aria-label="Smaller">${icon('zoom-out')}</button>
-        <span class="zoom-val rollbox"><span class="n" id="zVal">100%</span></span>
-        <button class="ju-icon" type="button" id="zIn" aria-label="Bigger">${icon('zoom-in')}</button>
-        <span class="sep"></span>
-        <a class="ju-icon" href="${esc(dl)}" download="${esc(D.name)}" aria-label="Download">${icon('download')}</a>
-        <button class="ju-icon" type="button" id="topBtn" aria-label="Back to top">${icon('arrow-up')}</button>
-      </div>
-      <div class="pages-scroll"><div class="pages" id="pages"></div></div>
-    </section>
     ${othersHtml()}
     ${contactHtml(SITE, D.title)}`;
 
-  // placeholders straight away, so the page doesn't jump while the PDF loads
-  const pagesEl = $('#pages');
-  const n0 = D.pages || 1;
-  let html = '';
-  for (let i = 1; i <= n0; i++) {
-    html += `<div class="page" data-n="${i}" style="aspect-ratio:${ratio}">${i === 1 && D.cover ? `<img class="ph" src="${esc(D.cover)}" alt="">` : ''}<span class="pno">${i}</span></div>`;
-  }
-  pagesEl.innerHTML = html;
-
-  const read = () => $('#reader').scrollIntoView({ behavior: M.calm() ? 'auto' : 'smooth', block: 'start' });
+  // "Read now" (or the cover) opens the reader over the page
+  const read = () => openReader();
   $('#readBtn').addEventListener('click', read);
   ui(() => $('.v-cover img').addEventListener('click', read));
   document.querySelectorAll('a[download]').forEach((a) => a.addEventListener('click', () => M.nudgeDown(a.querySelector('.i'))));
-  $('#topBtn').addEventListener('click', () => window.scrollTo({ top: 0, behavior: 'smooth' }));
+  // start fetching the reader in the background, so it opens fast
+  ui(() => setTimeout(() => { pdfjs().catch(() => {}); }, 1200));
   wireCommon(D.title, linkOf(D.code));
 
   // one count per visit (the team's own "Open page" adds ?preview=1 and is not counted)
@@ -138,17 +119,89 @@ function showDoc() {
     navigator.sendBeacon ? navigator.sendBeacon(`/api/p/${encodeURIComponent(D.code)}/scan`) : fetch(`/api/p/${encodeURIComponent(D.code)}/scan`, { method: 'POST', keepalive: true });
   });
 
-  startReader(pagesEl).catch((e) => {
+}
+
+// ---------- the reader: a full-screen window over the page ----------
+// The cover breaks into coloured grains that bind together as page 1, then the real pages are drawn as you scroll.
+// Closes with the X, the Esc key or the phone's Back button.
+let pdfDoc = null;            // the PDF stays loaded after the first open, so opening again is instant
+let reader = null;
+function openReader() {
+  if (reader) return;
+  const ratio = D.coverW && D.coverH ? D.coverW / D.coverH : 210 / 297;
+  const dl = D.download || D.file + '?dl=1';
+  const ov = document.createElement('div');
+  ov.className = 'reader-ov';
+  ov.setAttribute('role', 'dialog'); ov.setAttribute('aria-modal', 'true'); ov.setAttribute('aria-label', D.title);
+  ov.innerHTML = `
+    <div class="rbar ju-glass">
+      <span class="pos" id="pos">${D.pages ? `Page <span class="rollbox"><span class="n" id="posN">1</span></span> of ${D.pages}` : 'Opening…'}</span>
+      <span class="sep"></span>
+      <button class="ju-icon" type="button" id="zOut" aria-label="Smaller">${icon('zoom-out')}</button>
+      <span class="zoom-val rollbox"><span class="n" id="zVal">100%</span></span>
+      <button class="ju-icon" type="button" id="zIn" aria-label="Bigger">${icon('zoom-in')}</button>
+      <span class="sep"></span>
+      <a class="ju-icon" href="${esc(dl)}" download="${esc(D.name)}" aria-label="Download">${icon('download')}</a>
+      <button class="ju-icon" type="button" id="rClose" aria-label="Close">${icon('x')}</button>
+    </div>
+    <div class="reader-scroll" id="rScroll"><div class="pages-scroll"><div class="pages" id="pages"></div></div></div>`;
+  document.body.appendChild(ov);
+  document.body.style.overflow = 'hidden';
+
+  // page placeholders straight away (page 1 shows the cover until it is drawn)
+  const pagesEl = $('#pages', ov);
+  const n0 = D.pages || 1;
+  let html = '';
+  for (let i = 1; i <= n0; i++) {
+    html += `<div class="page" data-n="${i}" style="aspect-ratio:${ratio}">${i === 1 && D.cover ? `<img class="ph" src="${esc(D.cover)}" alt="">` : ''}<span class="pno">${i}</span></div>`;
+  }
+  pagesEl.innerHTML = html;
+
+  // the phone's Back button closes the reader instead of leaving the page
+  try { history.pushState({ reader: 1 }, '', location.href); } catch {}
+  const onPop = () => close(true);
+  const onKey = (e) => { if (e.key === 'Escape') close(); };
+  window.addEventListener('popstate', onPop);
+  document.addEventListener('keydown', onKey);
+  $('#rClose', ov).addEventListener('click', () => close());
+  ov.querySelector('a[download]').addEventListener('click', (e) => M.nudgeDown(e.currentTarget.querySelector('.i')));
+
+  let stopReader = () => {};
+  function close(fromBack) {
+    if (!reader) return;
+    reader = null;
+    window.removeEventListener('popstate', onPop);
+    document.removeEventListener('keydown', onKey);
+    if (!fromBack) { try { history.back(); } catch {} }
+    stopReader();
+    M.play(ov, [{ opacity: 1 }, { opacity: 0 }], { duration: 220, easing: 'ease-in' }).then(() => {
+      ov.querySelectorAll('canvas').forEach((c) => { c.width = c.height = 0; });
+      ov.remove();
+      document.body.style.overflow = '';
+    });
+  }
+  reader = { close };
+
+  // the cover dissolves into grains that bind together as page 1
+  const from = $('.v-cover img') || $('.v-cover .blank-cover');
+  const first = pagesEl.firstElementChild;
+  M.play($('.rbar', ov), [{ transform: 'translateY(-24px)' }, { transform: 'none' }], { duration: M.SPRING.gentle.duration, easing: M.SPRING.gentle.easing });
+  bindImage(from, first).then(() => M.bump(first, 1.015));
+
+  startReader(pagesEl, $('#rScroll', ov), ov).then((stop) => { stopReader = stop || stopReader; }).catch((e) => {
     console.error(e);
-    $('#pos').textContent = 'Could not open the pages';
+    const pos = $('#pos', ov); if (pos) pos.textContent = 'Could not open the pages';
     pagesEl.insertAdjacentHTML('beforebegin', `<p class="reader-note">The pages could not be shown here. Use <b>Download</b> to open the PDF.</p>`);
   });
 }
 
 // ---------- drawing pages near the screen ----------
-async function startReader(pagesEl) {
+async function startReader(pagesEl, scroller, box) {
+  const $$ = (q) => box.querySelector(q);
   const L = await pdfjs();
-  const pdf = await L.getDocument({ url: D.file, rangeChunkSize: 256 * 1024, disableAutoFetch: true, ...PDF_OPTS }).promise;
+  if (!pdfDoc) pdfDoc = await L.getDocument({ url: D.file, rangeChunkSize: 256 * 1024, disableAutoFetch: true, ...PDF_OPTS }).promise;
+  const pdf = pdfDoc;
+  if (!box.isConnected) return () => {};
   const n = pdf.numPages;
   // the server's page count can be missing for very old uploads: fix the placeholders
   const have = pagesEl.children.length;
@@ -159,7 +212,7 @@ async function startReader(pagesEl) {
     pagesEl.insertAdjacentHTML('beforeend', extra);
     while (pagesEl.children.length > n) pagesEl.lastElementChild.remove();
   }
-  $('#pos').innerHTML = `Page <span class="rollbox"><span class="n" id="posN">1</span></span> of ${n}`;
+  $$('#pos').innerHTML = `Page <span class="rollbox"><span class="n" id="posN">1</span></span> of ${n}`;
 
   const state = new Map(); // page number -> { canvas, width, task }
   const near = new Set();
@@ -195,7 +248,7 @@ async function startReader(pagesEl) {
     busy = true;
     try {
       // nearest pages to the middle of the screen first
-      const mid = window.innerHeight / 2;
+      const mid = scroller.clientHeight / 2 + scroller.getBoundingClientRect().top;
       const order = [...near].map((num) => pagesEl.children[num - 1]).filter(Boolean)
         .map((el) => ({ el, d: Math.abs(el.getBoundingClientRect().top + el.clientHeight / 2 - mid) })).sort((a, b) => a.d - b.d);
       for (const { el } of order) {
@@ -222,11 +275,11 @@ async function startReader(pagesEl) {
       if (e.isIntersecting) near.add(num); else { near.delete(num); release(num); }
     }
     pump();
-  }, { rootMargin: '200% 0px 200% 0px' });
+  }, { root: scroller, rootMargin: '200% 0px 200% 0px' });
   // which page is in the middle of the screen
   const posObs = new IntersectionObserver((entries) => {
-    for (const e of entries) if (e.isIntersecting) M.roll($('#posN'), e.target.dataset.n);
-  }, { rootMargin: '-45% 0px -45% 0px' });
+    for (const e of entries) if (e.isIntersecting) M.roll($$('#posN'), e.target.dataset.n);
+  }, { root: scroller, rootMargin: '-45% 0px -45% 0px' });
   for (const el of pagesEl.children) { nearObs.observe(el); posObs.observe(el); }
 
   // zoom: wider pages (sideways scroll), redrawn sharp
@@ -235,13 +288,21 @@ async function startReader(pagesEl) {
   const setZoom = (k) => {
     z = Math.max(0, Math.min(steps.length - 1, k));
     pagesEl.style.setProperty('--zoom', steps[z]);
-    $('#zOut').disabled = z === 0; $('#zIn').disabled = z === steps.length - 1;
-    M.roll($('#zVal'), Math.round(steps[z] * 100) + '%');
+    $$('#zOut').disabled = z === 0; $$('#zIn').disabled = z === steps.length - 1;
+    M.roll($$('#zVal'), Math.round(steps[z] * 100) + '%');
     clearTimeout(setZoom.t); setZoom.t = setTimeout(pump, 120);
   };
-  $('#zIn').addEventListener('click', () => setZoom(z + 1));
-  $('#zOut').addEventListener('click', () => setZoom(z - 1));
+  $$('#zIn').addEventListener('click', () => setZoom(z + 1));
+  $$('#zOut').addEventListener('click', () => setZoom(z - 1));
   setZoom(0);
   let rt = 0;
-  window.addEventListener('resize', () => { clearTimeout(rt); rt = setTimeout(pump, 200); }, { passive: true });
+  const onResize = () => { clearTimeout(rt); rt = setTimeout(pump, 200); };
+  window.addEventListener('resize', onResize, { passive: true });
+  // closing the reader lets go of everything it drew
+  return () => {
+    nearObs.disconnect(); posObs.disconnect();
+    window.removeEventListener('resize', onResize);
+    for (const num of [...state.keys()]) release(num);
+    near.clear();
+  };
 }

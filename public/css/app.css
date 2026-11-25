@@ -272,3 +272,6 @@ html.vt-theme::view-transition-old(root), html.vt-theme::view-transition-new(roo
 .ju .ju-inp.ta { height: auto; min-height: 84px; padding: 11px 14px; line-height: 1.45; resize: vertical; width: 100%; }
 .wait-tag { color: var(--warn); font-weight: 650; }
 @media (max-width: 520px) { .two { grid-template-columns: 1fr; gap: 0; } }
+
+/* a finger that starts on a big QR code moves its grains (particles.js) instead of scrolling; no long-press image menu */
+.qr-tile[data-link] { touch-action: none; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
