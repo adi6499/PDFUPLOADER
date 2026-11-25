@@ -2,6 +2,7 @@
 import { icon } from '/vendor/icons.js';
 import { qrSvg, qrSvgFile, qrPng, saveBlob } from './qr.js';
 import * as M from './motion.js';
+import { assemble } from './particles.js';
 
 export const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 export const ui = (fn) => { try { fn(); } catch (e) {} };
@@ -81,5 +82,5 @@ export function qrSheet({ link, title }) {
       try { await navigator.clipboard.writeText(link); toast('Link copied'); b.innerHTML = icon('check') + 'Copied'; M.bump(b.querySelector('.i'), 1.25); } catch { window.prompt('Copy this link:', link); }
     }
   });
-  M.bump(ov.querySelector('.qr-big'), 1.04);
+  assemble(ov.querySelector('.qr-big'), link);
 }

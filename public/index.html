@@ -27,10 +27,13 @@
         <img src="/assets/mark.png" alt="" width="38" height="38">
         <span><b>Jinharsh</b><small>Catalogues</small></span>
       </a>
+      <button class="ju-btn accent sm hub-upload" id="hubUpload" type="button" hidden></button>
       <button class="ju-icon" id="hubQr" type="button" aria-label="QR code for this page" title="QR code for this page"></button>
       <button class="ju-icon" id="hubShare" type="button" aria-label="Share" title="Share"></button>
     </div>
   </header>
+  <input type="file" id="hubFile" accept="application/pdf,.pdf" multiple hidden>
+  <div class="drop-veil" id="dropVeil" hidden><div class="card"><span id="dropIcon"></span><b>Drop to upload</b><span class="ju-muted">PDF files only</span></div></div>
   <main class="vwrap" id="app">
     <section class="hub-hero">
       <div class="ju-eyebrow" id="hubEyebrow">Jinharsh Industrial Solutions</div>

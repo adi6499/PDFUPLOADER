@@ -3,7 +3,8 @@
 import { icon } from '/vendor/icons.js';
 import { fmtSize } from './pdfkit.js';
 import * as M from './motion.js';
-import { esc, ui, contactHtml, share, qrSheet, blankCover } from './site.js';
+import { esc, ui, contactHtml, share, qrSheet, blankCover, toast } from './site.js';
+import { saveFiles } from './handoff.js';
 
 const $ = (s, el = document) => el.querySelector(s);
 const params = new URLSearchParams(location.search);
@@ -18,6 +19,32 @@ ui(() => {
   $('#hubShare').innerHTML = icon('share-2');
 });
 $('#hubQr').addEventListener('click', () => qrSheet({ link: S.publicUrl + '/', title: 'Jinharsh Catalogues' }));
+
+// ---------- Upload, for the team ----------
+// Shown to whoever may use the team page (signed in, or the office Wi-Fi copy where it is open).
+// The PDFs chosen here are handed to the team page, which opens its upload window with them.
+async function toTeam(files) {
+  const pdfs = [...files].filter((f) => f.type === 'application/pdf' || /\.pdf$/i.test(f.name));
+  if (!pdfs.length) { toast('Only PDF files can be uploaded.'); return; }
+  try { await saveFiles(pdfs); } catch { /* the team page will ask to choose the file again */ }
+  location.href = '/team#upload';
+}
+fetch('/api/info').then((r) => r.json()).then((inf) => {
+  if (!inf || !inf.auth || !inf.auth.signedIn) return;
+  const b = $('#hubUpload');
+  b.innerHTML = icon('upload') + '<span>Upload PDF</span>';
+  b.hidden = false;
+  M.bump(b, 1.06);
+  b.addEventListener('click', () => { $('#hubFile').value = ''; $('#hubFile').click(); });
+  $('#hubFile').addEventListener('change', (e) => toTeam(e.target.files));
+  ui(() => { $('#dropIcon').outerHTML = icon('upload', 'bob'); });
+  let depth = 0;
+  const hasFiles = (e) => [...(e.dataTransfer?.types || [])].includes('Files');
+  window.addEventListener('dragenter', (e) => { if (!hasFiles(e)) return; e.preventDefault(); depth++; $('#dropVeil').hidden = false; });
+  window.addEventListener('dragover', (e) => { if (hasFiles(e)) e.preventDefault(); });
+  window.addEventListener('dragleave', () => { depth = Math.max(0, depth - 1); if (!depth) $('#dropVeil').hidden = true; });
+  window.addEventListener('drop', (e) => { if (!hasFiles(e)) return; e.preventDefault(); depth = 0; $('#dropVeil').hidden = true; toTeam(e.dataTransfer.files); });
+}).catch(() => {});
 $('#hubShare').addEventListener('click', () => share('Jinharsh Catalogues', S.publicUrl + '/'));
 
 // waiting shapes while the list arrives (plain, nothing moves or shines)

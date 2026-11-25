@@ -62,3 +62,10 @@
   .cc-qr { top: 8px; right: 8px; width: 34px; height: 34px; }
 }
 @media (max-width: 330px) { .cards { grid-template-columns: 1fr; } .cc-body p { display: -webkit-box; } }
+
+/* the team's Upload button in the top bar */
+.ju .ju-top .hub-upload { margin-right: 4px; }
+@media (max-width: 420px) {
+  .hub .brand span { display: none; }
+  .ju .ju-top .hub-upload { padding: 0 14px; }
+}

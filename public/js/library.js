@@ -6,6 +6,8 @@ import { qrSvg, qrSvgFile, qrPng, saveBlob } from './qr.js';
 import { inspectPdf, fmtSize } from './pdfkit.js';
 import * as M from './motion.js';
 import { blankCover } from './site.js';
+import { collapseFrom, assemble } from './particles.js';
+import { takeFiles } from './handoff.js';
 
 const $ = (s, el = document) => el.querySelector(s);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -61,6 +63,12 @@ async function start() {
     if (inf.storageReady === false) return offline('storage');
   } catch (e) { return offline(); }
   await reload();
+  if (location.hash === '#upload') {
+    history.replaceState(null, '', location.pathname);
+    const files = await takeFiles();
+    if (files.length) startUpload(files);
+    else { toast('Choose the PDF with Upload PDF'); ui(() => M.bump($('#uploadBtn'), 1.08)); }
+  }
 }
 
 // The page was opened from somewhere that only shows the files (a plain web host, or a copy of the folder),
@@ -400,6 +408,7 @@ function uploadOne(file, idx, count) {
       if (!title) { fTitle.focus(); M.shake(fTitle); return; }
       S.busy = true; S.sheetLocked = true;
       fTitle.disabled = fCode.disabled = true; $('#fBrand', sh).disabled = $('#fCat', sh).disabled = true;
+      const swirl = collapseFrom($('#qrPrev', sh), S.publicUrl + '/c/' + (chosen || suggested));
       const stage = $('#stage', sh);
       M.resize(sh, () => {
         stage.innerHTML = `<div class="progress"><div class="ju-bar"><i id="pBar" style="width:0%"></i></div><div class="row"><span id="pWhat">Reading the PDF…</span><span id="pNum"></span></div></div>`;
@@ -417,8 +426,9 @@ function uploadOne(file, idx, count) {
         $('#pBar', sh).style.width = '100%';
         putDoc(final); S.filter = S.filter === 'archived' || S.filter === 'waiting' ? 'live' : S.filter; S.open = final.code;
         render();
-        showDone(sh, final, idx, count, resolveAll);
+        showDone(sh, final, idx, count, resolveAll, swirl);
       } catch (err) {
+        swirl.cancel();
         S.sheetLocked = false;
         fTitle.disabled = fCode.disabled = false;
         M.resize(sh, () => {
@@ -431,11 +441,10 @@ function uploadOne(file, idx, count) {
 }
 
 // The finished QR: the small preview grows into the big one, then (on "Done") flies into its row.
-function showDone(sh, doc, idx, count, resolveAll) {
+function showDone(sh, doc, idx, count, resolveAll, swirl) {
   S.sheetLocked = false;
   const more = count > 1 && idx < count - 1;
-  const from = $('#qrPrev', sh)?.getBoundingClientRect();
-  M.resize(sh, () => {
+  const settled = M.resize(sh, () => {
     sh.innerHTML = `${closeBtn()}
       <div class="done">
         <div class="tick">${icon('circle-check')}Uploaded</div>
@@ -451,7 +460,14 @@ function showDone(sh, doc, idx, count, resolveAll) {
       </div>`;
   }, 'gentle');
   const tile = $('#doneQr', sh);
-  if (from && from.width) M.fly(from, tile, { spring: 'bouncy', radiusFrom: 14 }); else M.bump(tile, 1.06);
+  const svg = tile.querySelector('svg');
+  if (swirl && !swirl.ended) {
+    // keep the finished code hidden until the particles have landed on it (they bring it back, or the timer does)
+    svg.style.visibility = 'hidden';
+    const reveal = () => { svg.style.visibility = ''; M.bump(tile, 1.03); };
+    setTimeout(() => { if (svg.style.visibility === 'hidden' && swirl.ended) reveal(); }, 4000);
+    settled.then(() => swirl.into(tile, doc.link, reveal));
+  } else assemble(tile, doc.link);
   ui(() => M.bump($('.done .tick', sh), 1.12));
 
   const finish = (next) => {

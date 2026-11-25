@@ -114,13 +114,13 @@ export function resize(box, change, spring = 'smooth') {
   const h0 = box ? box.getBoundingClientRect().height : 0;
   change();
   try {
-    if (!box || calm()) return;
+    if (!box || calm()) return Promise.resolve();
     const h1 = box.getBoundingClientRect().height;
-    if (Math.abs(h1 - h0) < 2) return;
+    if (Math.abs(h1 - h0) < 2) return Promise.resolve();
     const was = box.style.overflow;
     box.style.overflow = 'hidden';
-    play(box, [{ height: h0 + 'px' }, { height: h1 + 'px' }], sp(spring)).then(() => { box.style.overflow = was; });
-  } catch {}
+    return play(box, [{ height: h0 + 'px' }, { height: h1 + 'px' }], sp(spring)).then(() => { box.style.overflow = was; });
+  } catch { return Promise.resolve(); }
 }
 
 // A sheet leaving: it sinks and the veil clears, then it is hidden.
