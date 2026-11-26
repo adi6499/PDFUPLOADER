@@ -3,7 +3,7 @@
 import { icon } from '/vendor/icons.js?v=3';
 import { fmtSize } from './pdfkit.js';
 import * as M from './motion.js';
-import { esc, ui, contactHtml, shareSheet, qrSheet, blankCover, toast } from './site.js';
+import { esc, ui, contactHtml, shareSheet, qrSheet, blankCover, toast, byName } from './site.js';
 import { saveFiles } from './handoff.js';
 import { track } from './visitor.js';
 
@@ -68,8 +68,8 @@ async function load() {
     return;
   }
   // catalogues with a PDF first (newest first), then those still waiting
-  S.all.sort((a, b) => (a.waiting === b.waiting ? String(b.updatedAt).localeCompare(String(a.updatedAt)) : a.waiting ? 1 : -1));
-  const brands = [...new Set(S.all.map((d) => d.brand).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+  S.all.sort((a, b) => (a.waiting === b.waiting ? byName(b.updatedAt, a.updatedAt) : a.waiting ? 1 : -1));
+  const brands = [...new Set(S.all.map((d) => d.brand).filter(Boolean))].sort(byName);
   const ready = S.all.filter((d) => !d.waiting).length;
   $('#hubEyebrow').textContent = `${S.all.length} catalogue${S.all.length === 1 ? '' : 's'}${brands.length ? ` · ${brands.length} brand${brands.length === 1 ? '' : 's'}` : ''} · ${ready} ready to read`;
   $('#chips').innerHTML = ['', ...brands].map((b) => `<button type="button" class="ju-chip${b === S.brand ? ' on' : ''}" data-brand="${esc(b)}">${b ? esc(b) : 'All'}</button>`).join('');

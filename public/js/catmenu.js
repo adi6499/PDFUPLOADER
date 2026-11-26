@@ -5,10 +5,11 @@ import * as M from './motion.js';
 import { swallow } from './particles.js';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const byName = (a, b) => { const x = String(a).toLowerCase(), y = String(b).toLowerCase(); return x < y ? -1 : x > y ? 1 : 0; }; // A to Z, ignoring capitals
 
 export function openMenu({ list = [], current = '', from = null } = {}) {
   if (document.querySelector('.cat-drawer')) return;
-  const brands = [...new Set(list.map((c) => c.brand).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+  const brands = [...new Set(list.map((c) => c.brand).filter(Boolean))].sort(byName);
   const ov = document.createElement('div');
   ov.className = 'drawer-ov';
   ov.innerHTML = `<aside class="cat-drawer" role="dialog" aria-modal="true" aria-label="All catalogues">

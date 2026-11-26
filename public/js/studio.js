@@ -9,6 +9,7 @@ import { swallow, pourInto } from './particles.js';
 import { makeZip } from './zip.js';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const byName = (a, b) => { const x = String(a).toLowerCase(), y = String(b).toLowerCase(); return x < y ? -1 : x > y ? 1 : 0; }; // A to Z, ignoring capitals
 const toast = (t) => { try { JUI.toast(t); } catch {} };
 const fileName = (s) => String(s || 'QR').replace(/[\\/:*?"<>|]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 80);
 const short = (u) => String(u).replace(/^https?:\/\//, '').replace(/\/$/, '');
@@ -19,7 +20,7 @@ export function openStudio({ catalogs = [], publicUrl = location.origin, site = 
     { code: '', title: 'All catalogues (front page)', brand: site.company?.short || 'Jinharsh', link: base + '/' },
     ...catalogs.map((c) => ({ code: c.code, title: c.title, brand: c.brand || '', link: `${base}/c/${c.code}`, waiting: !!c.waiting })),
   ];
-  const brands = [...new Set(catalogs.map((c) => c.brand).filter(Boolean))].sort((a, b) => a.localeCompare(b));
+  const brands = [...new Set(catalogs.map((c) => c.brand).filter(Boolean))].sort(byName);
   const ov = document.createElement('div');
   ov.className = 'ju-overlay studio-ov';
   ov.innerHTML = `<div class="ju-sheet studio" role="dialog" aria-modal="true" aria-label="QR Studio">

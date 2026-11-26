@@ -48,6 +48,8 @@ const swallowOut = (sheet, ov, at) => { swallow(sheet, { at }); return M.play(ov
 
 export const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 export const ui = (fn) => { try { fn(); } catch (e) {} };
+// A to Z, ignoring capitals (brand names): plain comparison, as the language-aware one loads big tables on first use
+export const byName = (a, b) => { const x = String(a).toLowerCase(), y = String(b).toLowerCase(); return x < y ? -1 : x > y ? 1 : 0; };
 export const toast = (t) => ui(() => JUI.toast(t));
 export const shortLink = (l) => String(l).replace(/^https?:\/\//, '').replace(/\/$/, '');
 

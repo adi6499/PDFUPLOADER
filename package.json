@@ -11,7 +11,8 @@
     "test": "node tools/test-api.mjs",
     "test:trial": "node tools/test-blob.mjs",
     "import-hub": "node tools/import-hub.mjs",
-    "bench:memory": "node tools/bench-memory.mjs"
+    "bench:memory": "node tools/bench-memory.mjs",
+    "speed": "node tools/speed.mjs"
   },
   "devDependencies": {
     "esbuild": "0.28.2",

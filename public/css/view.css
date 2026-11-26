@@ -46,6 +46,8 @@
 
 /* ---------- contact ---------- */
 .contact { margin-top: 18px; }
+/* below the screen at first: laid out only when it comes near, so the page is ready sooner on a slow phone */
+.contact { content-visibility: auto; contain-intrinsic-size: auto 320px; }
 .contact h2 { font-size: 24px; letter-spacing: -.025em; margin: 0 0 4px; }
 .contact > p { margin: 0 0 18px; color: var(--muted); }
 .c-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }

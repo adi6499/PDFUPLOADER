@@ -97,8 +97,16 @@ function showWaiting() {
 }
 
 // ---------- the catalogue ----------
+// "26 November 2026", written out by hand: asking the phone for an Indian-style date loads its whole language
+// tables the first time (about a tenth of a second, longer on a slow phone), right while the page is opening
+function longDate(iso) {
+  const months = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
+  const d = new Date(iso);
+  return isNaN(d) ? '' : `${d.getDate()} ${months[d.getMonth()]} ${d.getFullYear()}`;
+}
+
 function showDoc() {
-  const updated = new Date(D.updatedAt).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' });
+  const updated = longDate(D.updatedAt);
   const ratio = D.coverW && D.coverH ? D.coverW / D.coverH : 210 / 297;
   const cover = D.cover
     ? `<img src="${esc(D.cover)}" alt="Cover of ${esc(D.title)}" width="${D.coverW || 720}" height="${D.coverH || 1018}" fetchpriority="high" style="view-transition-name:cover-${esc(D.code)}">`
