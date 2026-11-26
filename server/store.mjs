@@ -134,7 +134,7 @@ export class Store {
     const t = nowIso();
     const doc = {
       code, title: cleanTitle(title) || cleanFileName(name).replace(/\.pdf$/i, ''),
-      brand: cleanTitle(input.brand).slice(0, 60), category: cleanTitle(input.category).slice(0, 60), note: cleanNote(input.note), sourceUrl: '',
+      brand: this.brandOf(input.brand), category: this.categoryOf(input.category), note: cleanNote(input.note), sourceUrl: '',
       status: 'live', createdAt: t, updatedAt: t, current: 1,
       versions: [{ v: 1, name: cleanFileName(name), size, pages: pages || null, uploadedAt: t, cover: null, ...extra }],
       scans: 0, lastScanAt: null, scanDays: {},
@@ -146,12 +146,23 @@ export class Store {
 
   // A catalogue that has its link (and QR) but no PDF yet: its scan page says "coming soon",
   // or opens the maker's own copy (sourceUrl) until our PDF is uploaded. Used for the old hub's catalogues.
+  // one spelling per brand (and category): "JinHarsh" or "JINHARSH" becomes the "Jinharsh" already used by another
+  // catalogue, so the brand filters never show the same brand twice
+  brandOf(b, except = null) { return this.sameAs(b, 'brand', except); }
+  categoryOf(c, except = null) { return this.sameAs(c, 'category', except); }
+  sameAs(v, key, except) {
+    const t = cleanTitle(v).slice(0, 60);
+    if (!t) return '';
+    const hit = this.db.docs.find((d) => d !== except && d[key] && d[key].toLowerCase() === t.toLowerCase());
+    return hit ? hit[key] : t;
+  }
+
   async createWaiting({ code, title, brand, category, note, sourceUrl }) {
     const c = this.checkCode(code);
     if (!c.ok) return null;
     const t = nowIso();
     const doc = {
-      code: c.code, title: cleanTitle(title) || c.code, brand: cleanTitle(brand).slice(0, 60), category: cleanTitle(category).slice(0, 60),
+      code: c.code, title: cleanTitle(title) || c.code, brand: this.brandOf(brand), category: this.categoryOf(category),
       note: cleanNote(note), sourceUrl: cleanUrl(sourceUrl), status: 'live', createdAt: t, updatedAt: t, current: 0, versions: [],
       scans: 0, lastScanAt: null, scanDays: {},
     };
@@ -196,8 +207,8 @@ export class Store {
   async update(doc, patch) {
     if (patch.title !== undefined) { const t = cleanTitle(patch.title); if (t) doc.title = t; }
     if (patch.note !== undefined) doc.note = cleanNote(patch.note);
-    if (patch.brand !== undefined) doc.brand = cleanTitle(patch.brand).slice(0, 60);
-    if (patch.category !== undefined) doc.category = cleanTitle(patch.category).slice(0, 60);
+    if (patch.brand !== undefined) doc.brand = this.brandOf(patch.brand, doc);
+    if (patch.category !== undefined) doc.category = this.categoryOf(patch.category, doc);
     if (patch.sourceUrl !== undefined) doc.sourceUrl = cleanUrl(patch.sourceUrl);
     if (patch.media !== undefined) doc.media = cleanMedia(patch.media);
     if (patch.status === 'live' || patch.status === 'archived') doc.status = patch.status;

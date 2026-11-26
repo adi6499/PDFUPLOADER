@@ -151,6 +151,8 @@ try {
   ok(csv.headers.get('content-type').startsWith('text/csv') && csvBytes[0] === 0xef && csvBytes[1] === 0xbb && csvBytes[2] === 0xbf && csvText.includes('Price for 22220 EJ?'), 'queries download as a CSV that Excel opens correctly');
   r = await j(await T(`/api/settings`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ exhibition: { name: 'IMTEX', start: '2026-12-01', end: '2026-11-01' } }) }));
   ok(r.status === 400, 'an exhibition cannot end before it starts');
+  r = await j(await T(`/api/docs/catalogue`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ brand: 'TIMKEN' }) }));
+  ok(r.body.brand === 'Timken', 'a brand typed in other capitals joins the one already used (never "Timken" and "TIMKEN" side by side)');
   r = await j(await T(`/api/settings`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ exhibition: { name: 'IMTEX', start: '2026-01-01', end: '2026-01-05' } }) }));
   await post('/api/track', { type: 'visit', code: 'catalogue' });
   r = await j(await T(`/api/insights`));
