@@ -81,6 +81,16 @@ export async function addVersion(code, file, { pages, nextV }, onProgress) {
   return upload('/api/docs/' + encodeURIComponent(code) + '/versions?' + q, file, onProgress);
 }
 
+// the small copy of the cover (best effort: lists simply use the full cover if this fails)
+export async function putThumb(code, v, blob, w, h) {
+  const r = await fetch(`/api/docs/${encodeURIComponent(code)}/versions/${v}/thumb?w=${w || ''}&h=${h || ''}`, {
+    method: 'PUT', headers: { 'Content-Type': blob.type }, body: blob,
+  });
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(j.error || 'Thumbnail upload failed');
+  return j;
+}
+
 export async function putCover(code, v, blob, w, h) {
   const r = await fetch(`/api/docs/${encodeURIComponent(code)}/versions/${v}/cover?w=${w || ''}&h=${h || ''}`, {
     method: 'PUT', headers: { 'Content-Type': blob.type }, body: blob,

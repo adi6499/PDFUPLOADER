@@ -16,6 +16,24 @@ export const PDF_OPTS = {
 
 const ui = (fn) => { try { const r = fn(); if (r && r.catch) r.catch(() => {}); } catch {} };
 
+// The small copy of a cover (a canvas or a loaded picture), for lists and the front page: 360 px wide,
+// about a sixth of the bytes of the full cover. Returns { blob, w, h }.
+export async function makeThumb(src, width = 360) {
+  const sw = src.naturalWidth || src.width, sh = src.naturalHeight || src.height;
+  if (!sw || !sh) throw new Error('no picture');
+  const w = Math.min(width, sw), h = Math.round((sh * w) / sw);
+  const cv = document.createElement('canvas');
+  cv.width = w; cv.height = h;
+  const g = cv.getContext('2d', { alpha: false });
+  g.fillStyle = '#fff'; g.fillRect(0, 0, w, h);
+  g.imageSmoothingQuality = 'high';
+  g.drawImage(src, 0, 0, w, h);
+  let blob = await new Promise((ok) => cv.toBlob(ok, 'image/webp', 0.8));
+  if (!blob || blob.type !== 'image/webp') blob = await new Promise((ok) => cv.toBlob(ok, 'image/jpeg', 0.8));
+  if (!blob) throw new Error('no picture');
+  return { blob, w, h };
+}
+
 // Reads a chosen file: page count, a good title guess, and a cover picture of page 1.
 export async function inspectPdf(file, coverWidth = 720) {
   const L = await pdfjs();

@@ -3,7 +3,7 @@
 import { icon } from '/vendor/icons.js';
 import * as API from './api.js';
 import { qrSvg, qrSvgFile, qrPng, saveBlob } from './qr.js';
-import { inspectPdf, fmtSize } from './pdfkit.js';
+import { inspectPdf, fmtSize, makeThumb } from './pdfkit.js';
 import * as M from './motion.js';
 import { blankCover } from './site.js';
 import { collapseFrom, assemble, enableHoverScatter, enableButtonParticles, swallow, formPage, morphQR, pourInto, stream } from './particles.js';
@@ -99,6 +99,29 @@ async function reload() {
     S.docs = j.docs; S.publicUrl = j.publicUrl; S.printable = j.printable;
   } catch (e) { toast(e.message); }
   render();
+  fillThumbs();
+}
+
+// Covers saved before small copies existed: make them here (in this browser, from the cover itself) and send them up.
+// Quiet and one at a time; anything that fails is simply tried again the next time the team screen opens.
+let filling = false;
+async function fillThumbs() {
+  if (filling) return;
+  filling = true;
+  try {
+    const todo = (S.docs || []).filter((d) => d.live && d.live.cover && !d.live.thumb && d.live.version).slice(0, 60);
+    for (const d of todo) {
+      try {
+        const img = new Image();
+        img.crossOrigin = 'anonymous';
+        img.src = d.live.cover;
+        await img.decode();
+        const t = await makeThumb(img);
+        putDoc(await API.putThumb(d.code, d.live.version, t.blob, t.w, t.h));
+      } catch { /* next time */ }
+      await new Promise((r) => setTimeout(r, 120));
+    }
+  } finally { filling = false; }
 }
 
 // ---------- drawing ----------
@@ -193,7 +216,7 @@ function renderList() {
 
 function rowHtml(d) {
   const L = d.live, open = S.open === d.code;
-  const cover = L.cover ? `<img src="${esc(L.cover)}" alt="" loading="lazy" decoding="async">` : L.waiting ? blankCover(d) : icon('file-text');
+  const cover = L.cover ? `<img src="${esc(L.thumb || L.cover)}" alt="" width="${L.coverW || 720}" height="${L.coverH || 1018}" loading="lazy" decoding="async">` : L.waiting ? blankCover(d) : icon('file-text');
   const bits = [d.brand ? esc(d.brand) : null, `<span class="code">/c/${esc(d.code)}</span>`,
     L.waiting ? '<span class="wait-tag">Waiting for the PDF</span>' : null, L.pages ? plural(L.pages, 'page', 'pages') : null, L.waiting ? null : fmtSize(L.size)].filter(Boolean).join(' · ');
   return `<div class="doc${open ? ' open' : ''}" data-key="${esc(d.code)}" data-code="${esc(d.code)}">
@@ -442,7 +465,10 @@ function uploadOne(file, idx, count) {
         flow();
         $('#pWhat', sh).textContent = 'Saving the cover…';
         let final = doc;
-        if (info?.cover) { try { final = await API.putCover(doc.code, 1, info.cover, info.coverW, info.coverH); } catch {} }
+        if (info?.cover) {
+          try { final = await API.putCover(doc.code, 1, info.cover, info.coverW, info.coverH); } catch {}
+          try { const t = await makeThumb(info.canvas); final = await API.putThumb(doc.code, 1, t.blob, t.w, t.h); } catch {}
+        }
         $('#pBar', sh).style.width = '100%';
         putDoc(final); S.filter = S.filter === 'archived' || S.filter === 'waiting' ? 'live' : S.filter; S.open = final.code;
         render();
@@ -555,7 +581,10 @@ async function startReplace(file) {
         $('#pNum', sh).textContent = `${fmtSize(a)} of ${fmtSize(b)}`;
       });
       flow();
-      if (info?.cover) { try { doc = await API.putCover(doc.code, doc.current, info.cover, info.coverW, info.coverH); } catch {} }
+      if (info?.cover) {
+        try { doc = await API.putCover(doc.code, doc.current, info.cover, info.coverW, info.coverH); } catch {}
+        try { const t = await makeThumb(info.canvas); doc = await API.putThumb(doc.code, doc.current, t.blob, t.w, t.h); } catch {}
+      }
       // the new cover slides over the old one, then everything settles
       const nb = $('#newCover', sh), ob = $('#oldCover', sh);
       if (nb && ob) await M.play(nb, [{ transform: 'none' }, { transform: `translateX(${ob.getBoundingClientRect().left - nb.getBoundingClientRect().left}px)` }], { duration: 420, easing: 'cubic-bezier(.5,0,.2,1)', fill: 'forwards' });

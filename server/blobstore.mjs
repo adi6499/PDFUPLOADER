@@ -74,8 +74,8 @@ export class BlobStore extends Store {
 
   async placeFile(code, v, input) { return { url: input.url, pathname: input.pathname }; }
 
-  async writeCover(code, v, ext, buf) {
-    const r = await this.api.put(`docs/${code}/v${v}.${ext}`, buf, this.opts({
+  async writeCover(code, v, ext, buf, old, suffix = '') {
+    const r = await this.api.put(`docs/${code}/v${v}${suffix}.${ext}`, buf, this.opts({
       access: 'public', addRandomSuffix: true,
       contentType: ext === 'webp' ? 'image/webp' : 'image/jpeg', cacheControlMaxAge: 31536000,
     }));

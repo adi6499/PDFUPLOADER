@@ -94,6 +94,13 @@ try {
   const hub = await fetch(`${BASE}/`);
   const hubHtml = await hub.text();
   ok(hubHtml.includes('id="boot"') && hubHtml.includes('Test Catalogue'), 'the front page arrives with its list inside (one trip less)');
+  r = await j(await T(`/api/docs/catalogue/versions/1/cover?w=720&h=1018`, { method: 'PUT', headers: { 'Content-Type': 'image/webp' }, body: Buffer.from('RIFFxxxxWEBP') }));
+  ok(r.status === 200 && r.body.live.cover && !r.body.live.thumb, 'a cover picture is saved (its small copy comes next)');
+  r = await j(await T(`/api/docs/catalogue/versions/1/thumb?w=360&h=509`, { method: 'PUT', headers: { 'Content-Type': 'image/webp' }, body: Buffer.from('RIFFyyyyWEBP') }));
+  ok(r.status === 200 && /\/cover\/catalogue\/1-t\.webp$/.test(r.body.live.thumb || ''), 'the small copy of the cover is saved');
+  const th = await fetch(`${BASE}/cover/catalogue/1-t.webp`);
+  ok(th.status === 200 && (await th.text()) === 'RIFFyyyyWEBP', 'the small copy is served to lists and the front page');
+  ok((await (await fetch(`${BASE}/`)).text()).includes('/cover/catalogue/1-t.webp'), 'the front page shows the small copy, not the full cover');
 
   console.log('Replace the PDF');
   r = await j(await T(`/api/docs/catalogue/versions?name=cat-v2.pdf&pages=1`, { method: 'POST', headers: { 'Content-Type': 'application/pdf' }, body: tinyPdf('two') }));

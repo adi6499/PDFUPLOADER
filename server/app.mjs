@@ -123,6 +123,8 @@ export async function createApp(overrides = {}) {
       file, download: BLOB ? v.url + '?download=1' : file + '?dl=1',
       cover: v.cover ? (BLOB ? v.cover.url : `/cover/${doc.code}/${v.v}.${v.cover.ext}`) : null,
       coverW: v.cover?.w || null, coverH: v.cover?.h || null,
+      // the small copy for lists and the front page (the full cover until one has been made)
+      thumb: v.thumb ? (BLOB ? v.thumb.url : `/cover/${doc.code}/${v.v}-t.${v.thumb.ext}`) : null,
     };
   }
   const teamDoc = (req, doc) => ({ ...doc, link: `${base(req)}/c/${doc.code}`, live: publicDoc(doc) });
@@ -182,7 +184,7 @@ export async function createApp(overrides = {}) {
     const list = store.list().filter((d) => d.status === 'live').map(publicDoc);
     // the same order the page shows: catalogues with a PDF first, newest first
     const first = list.filter((d) => !d.waiting && d.cover).sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt))).slice(0, 2);
-    const preload = first.map((d) => `<link rel="preload" as="image" href="${esc(d.cover)}">`).join('\n  ');
+    const preload = first.map((d) => `<link rel="preload" as="image" href="${esc(d.thumb || d.cover)}">`).join('\n  ');
     const data = JSON.stringify({ catalogs: list, publicUrl: base(req), site: SITE, printable: PRINTABLE }).replace(/</g, '\\u003c');
     const html = hubTemplate.replace('<!--PRELOAD-->', preload).replace('<!--DATA-->', `<script type="application/json" id="boot">${data}</script>`);
     sendPacked(req, res, 200, html, { 'Content-Type': 'text/html; charset=utf-8', 'Content-Security-Policy': CSP, 'Cache-Control': 'no-cache' });
@@ -197,7 +199,7 @@ export async function createApp(overrides = {}) {
     let state, meta;
     // the other catalogues, for the "More catalogues" list under each one
     const others = store.list().filter((d) => d.status === 'live' && d.code !== code).map(publicDoc).filter((p) => !p.waiting)
-      .slice(0, 24).map((p) => ({ code: p.code, title: p.title, brand: p.brand, cover: p.cover, coverW: p.coverW, coverH: p.coverH, pages: p.pages }));
+      .slice(0, 24).map((p) => ({ code: p.code, title: p.title, brand: p.brand, cover: p.cover, thumb: p.thumb, coverW: p.coverW, coverH: p.coverH, pages: p.pages }));
     if (doc && doc.status === 'live') {
       const p = publicDoc(doc);
       state = { status: p.waiting ? 'waiting' : 'live', doc: p, countsScans: !BLOB, others };
@@ -391,14 +393,15 @@ export async function createApp(overrides = {}) {
       return send(res, 201, teamDoc(req, await store.addVersion(doc, { tmp: up.tmp, size: up.size, name: q.get('name'), pages: num(q.get('pages')) })));
     }
 
-    if (parts[3] === 'versions' && parts[4] && parts[5] === 'cover' && m === 'PUT') {
-      const v = num(parts[4]);
+    if (parts[3] === 'versions' && parts[4] && (parts[5] === 'cover' || parts[5] === 'thumb') && m === 'PUT') {
+      const v = num(parts[4]), small = parts[5] === 'thumb';
       const type = (req.headers['content-type'] || '').split(';')[0].trim();
       const ext = type === 'image/webp' ? 'webp' : type === 'image/jpeg' ? 'jpg' : null;
       if (!ext || !v) { req.resume(); return fail(res, 415, 'Cover must be a JPEG or WebP picture.'); }
       let buf;
-      try { buf = await readSmallBody(req, 4 * 1024 * 1024); } catch { return fail(res, 413, 'Cover picture too big'); }
-      const ver = await store.setCover(doc, v, ext, buf, num(q.get('w')), num(q.get('h')));
+      try { buf = await readSmallBody(req, (small ? 1 : 4) * 1024 * 1024); } catch { return fail(res, 413, 'Cover picture too big'); }
+      const ver = small ? await store.setThumb(doc, v, ext, buf, num(q.get('w')), num(q.get('h')))
+        : await store.setCover(doc, v, ext, buf, num(q.get('w')), num(q.get('h')));
       if (!ver) return fail(res, 404, 'No such version');
       return send(res, 200, teamDoc(req, doc));
     }
@@ -407,8 +410,16 @@ export async function createApp(overrides = {}) {
   }
 
   // ---------- the router ----------
+  // the public address is https: a visit that came in over plain http is sent to the https address, and browsers are
+  // told to always use https from now on (the proxy in front says which one it was)
+  const HTTPS_SITE = /^https:/i.test(PUBLIC_URL);
   async function handle(req, res) {
     try {
+      const proto = TRUST_PROXY ? String(req.headers['x-forwarded-proto'] || '').split(',')[0].trim().toLowerCase() : '';
+      if (HTTPS_SITE && proto === 'http' && (req.method === 'GET' || req.method === 'HEAD')) {
+        res.writeHead(301, { Location: PUBLIC_URL + req.url, 'Cache-Control': 'no-cache' }); return res.end();
+      }
+      if (proto === 'https') res.setHeader('Strict-Transport-Security', 'max-age=31536000');
       const url = new URL(req.url, 'http://x');
       // on Vercel, the rewrite passes the original address in ?__p=
       const orig = url.searchParams.get('__p');
@@ -445,13 +456,14 @@ export async function createApp(overrides = {}) {
         return await sendFile(req, res, store.filePath(doc.code, v), 'application/pdf', { immutable: true, disposition: disp });
       }
 
-      // /cover/<code>/<v>.<ext>
+      // /cover/<code>/<v>.<ext>  (the cover)   /cover/<code>/<v>-t.<ext>  (its small copy)
       if (parts[0] === 'cover' && parts[1] && parts[2]) {
         const doc = store.get(decodeURIComponent(parts[1]));
-        const mm = /^(\d+)\.(jpg|webp)$/.exec(parts[2]);
+        const mm = /^(\d+)(-t)?\.(jpg|webp)$/.exec(parts[2]);
         if (!doc || !mm) return fail(res, 404, 'Not found');
-        if (BLOB) { const ver = doc.versions.find((x) => x.v === Number(mm[1])); return ver?.cover?.url ? redirect(res, ver.cover.url) : fail(res, 404, 'Not found'); }
-        return await sendFile(req, res, store.coverPath(doc.code, Number(mm[1]), mm[2]), MIME['.' + mm[2]], { immutable: true });
+        const which = mm[2] ? 'thumb' : 'cover';
+        if (BLOB) { const ver = doc.versions.find((x) => x.v === Number(mm[1])); return ver?.[which]?.url ? redirect(res, ver[which].url) : fail(res, 404, 'Not found'); }
+        return await sendFile(req, res, store.coverPath(doc.code, Number(mm[1]), mm[3], mm[2] || ''), MIME['.' + mm[3]], { immutable: true });
       }
 
       // a private test folder, only ever on this computer

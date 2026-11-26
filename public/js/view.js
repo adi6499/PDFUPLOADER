@@ -26,7 +26,7 @@ function othersHtml() {
   return `<section class="more-cats">
     <div class="mc-head"><h2>More catalogues</h2><a class="ju-btn sm ghost" href="/">${icon('book-open')}See all</a></div>
     <div class="mc-grid">${list.map((o) => `<a class="mc-card" href="/c/${esc(o.code)}">
-      <div class="mc-cover">${o.cover ? `<img src="${esc(o.cover)}" alt="" width="${o.coverW || 720}" height="${o.coverH || 1018}" loading="lazy" decoding="async" style="view-transition-name:cover-${esc(o.code)}">` : blankCover(o)}</div>
+      <div class="mc-cover">${o.cover ? `<img src="${esc(o.thumb || o.cover)}" alt="" width="${o.coverW || 720}" height="${o.coverH || 1018}" loading="lazy" decoding="async" style="view-transition-name:cover-${esc(o.code)}">` : blankCover(o)}</div>
       <div class="mc-text">${o.brand ? `<span class="mc-brand">${esc(o.brand)}</span>` : ''}<b>${esc(o.title)}</b></div>
     </a>`).join('')}</div>
   </section>`;

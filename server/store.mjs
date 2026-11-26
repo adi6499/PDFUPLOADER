@@ -8,6 +8,7 @@
 //   <dataDir>/db.json                     the list of documents (written safely: temp file, then rename)
 //   <dataDir>/docs/<code>/v1.pdf          every version of every PDF is kept
 //   <dataDir>/docs/<code>/v1.jpg          the cover picture of that version
+//   <dataDir>/docs/<code>/v1-t.webp       a small copy of it (thumbnail) for lists and the front page
 //   <dataDir>/tmp/                        uploads land here first, then move into place
 import { promises as fs, createWriteStream } from 'node:fs';
 import { join } from 'node:path';
@@ -98,7 +99,7 @@ export class Store {
 
   tmpPath() { return join(this.tmpDir, randomUUID() + '.part'); }
   filePath(code, v) { return join(this.docsDir, code, 'v' + v + '.pdf'); }
-  coverPath(code, v, ext) { return join(this.docsDir, code, 'v' + v + '.' + ext); }
+  coverPath(code, v, ext, suffix = '') { return join(this.docsDir, code, 'v' + v + suffix + '.' + ext); }
 
   // ---- where the files physically go (a hosted copy can swap these for another kind of storage) ----
   kind = 'disk';
@@ -108,9 +109,10 @@ export class Store {
     await fs.rename(input.tmp, this.filePath(code, v));
     return {};
   }
-  async writeCover(code, v, ext, buf, old) {
-    if (old && old.ext !== ext) await fs.rm(this.coverPath(code, v, old.ext), { force: true });
-    await fs.writeFile(this.coverPath(code, v, ext), buf);
+  async writeCover(code, v, ext, buf, old, suffix = '') {
+    await fs.mkdir(join(this.docsDir, code), { recursive: true });
+    if (old && old.ext !== ext) await fs.rm(this.coverPath(code, v, old.ext, suffix), { force: true });
+    await fs.writeFile(this.coverPath(code, v, ext, suffix), buf);
     return {};
   }
   async removeFiles(code) { await fs.rm(join(this.docsDir, code), { recursive: true, force: true }); }
@@ -166,6 +168,17 @@ export class Store {
     if (!ver) return null;
     const extra = await this.writeCover(doc.code, v, ext, buf, ver.cover);
     ver.cover = { ext, w: w || null, h: h || null, at: nowIso(), ...extra };
+    ver.thumb = null; // a new cover needs a new small copy
+    await this.save();
+    return ver;
+  }
+
+  // the small copy of the cover, for lists and the front page (about a sixth of the size)
+  async setThumb(doc, v, ext, buf, w, h) {
+    const ver = doc.versions.find(x => x.v === v);
+    if (!ver || !ver.cover) return null;
+    const extra = await this.writeCover(doc.code, v, ext, buf, ver.thumb, '-t');
+    ver.thumb = { ext, w: w || null, h: h || null, at: nowIso(), ...extra };
     await this.save();
     return ver;
   }

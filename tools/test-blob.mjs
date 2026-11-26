@@ -84,6 +84,8 @@ try {
   console.log('Cover, scan page, file links');
   const cov = await fetch(`${B}/api/docs/catalogue/versions/1/cover?w=720&h=1018`, { method: 'PUT', headers: { 'Content-Type': 'image/webp' }, body: Buffer.from('RIFFxxxxWEBP') });
   ok(cov.status === 200, 'the cover picture is saved in the file storage');
+  const thb = await fetch(`${B}/api/docs/catalogue/versions/1/thumb?w=360&h=509`, { method: 'PUT', headers: { 'Content-Type': 'image/webp' }, body: Buffer.from('RIFFxxxxWEBP') });
+  ok(thb.status === 200 && !!(await thb.json()).live?.thumb, 'its small copy is saved in the file storage too');
   let html = await (await fetch(`${B}/c/catalogue`)).text();
   ok(html.includes('Test Catalogue') && html.includes('"countsScans":false'), 'the scan page opens (opens are not counted in the trial)');
   ok(/og:image" content="https:\/\/fakestore/.test(html), 'the WhatsApp preview picture comes from the file storage');
