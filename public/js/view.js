@@ -7,6 +7,7 @@ import { esc, ui, contactHtml, shareSheet, qrSheet, blankCover, idle, warmModule
 import { bindImage, swallow, formPage, perf } from './particles.js';
 import { track, needsDetails, beforeDownload } from './visitor.js';
 import { mediaHtml as renderMedia, wireMedia } from './media.js';
+import { catPath } from './backend.js';
 
 const $ = (s, el = document) => el.querySelector(s);
 
@@ -17,7 +18,7 @@ const D = BOOT.doc;
 const app = $('#app');
 const preview = new URLSearchParams(location.search).has('preview');
 const PUBLIC = (BOOT.publicUrl || location.origin).replace(/\/$/, '');
-const linkOf = (code) => `${PUBLIC}/c/${code}`;
+const linkOf = (code) => `${PUBLIC}${catPath(code)}`;
 // product videos, installation videos, trials & recommendations (added by the team under Edit details)
 const mediaHtml = () => renderMedia(D && D.media, D && D.code);
 wireMedia();
@@ -39,7 +40,7 @@ function othersHtml() {
   if (!list.length) return '';
   return `<section class="more-cats">
     <div class="mc-head"><h2>More catalogues</h2><a class="ju-btn sm ghost" href="/">${icon('book-open')}See all</a></div>
-    <div class="mc-grid">${list.map((o) => `<a class="mc-card" href="/c/${esc(o.code)}">
+    <div class="mc-grid">${list.map((o) => `<a class="mc-card" href="${esc(catPath(o.code))}">
       <div class="mc-cover">${o.cover ? `<img src="${esc(o.thumb || o.cover)}" alt="" width="${o.coverW || 720}" height="${o.coverH || 1018}" loading="lazy" decoding="async" style="view-transition-name:cover-${esc(o.code)}">` : blankCover(o)}</div>
       <div class="mc-text">${o.brand ? `<span class="mc-brand">${esc(o.brand)}</span>` : ''}<b>${esc(o.title)}</b></div>
     </a>`).join('')}</div>
@@ -119,7 +120,7 @@ function showDoc() {
       <div class="v-text">
         <div class="ju-eyebrow">${D.brand ? `<span class="brand-pill">${esc(D.brand)}</span>` : ''}PDF${D.pages ? ' · ' + D.pages + (D.pages === 1 ? ' page' : ' pages') : ''} · ${fmtSize(D.size)}</div>
         <h1>${esc(D.title)}</h1>
-        <p class="sub">${D.note ? esc(D.note) + ' · ' : ''}Updated ${updated}</p>
+        <p class="sub">${[D.note ? esc(D.note) : '', updated ? 'Updated ' + updated : ''].filter(Boolean).join(' · ')}</p>
         <div class="v-actions">
           <button class="ju-btn accent" type="button" id="readBtn">${icon('book-open')}Read now</button>
           <a class="ju-btn primary" href="${esc(dl)}" download="${esc(D.name)}" id="dlBtn">${icon('arrow-down-to-line')}Download</a>
@@ -252,6 +253,15 @@ function openReader() {
     });
   }
   reader = { close };
+
+  // a PDF on another website (no permission to read it from here): the reader shows it in that viewer instead
+  if (D.frame) {
+    $('#rScroll', ov).innerHTML = `<iframe class="reader-frame" src="${esc(D.frame)}" title="${esc(D.title)}"></iframe>`;
+    $('#pos', ov).textContent = D.frameLabel || 'Viewer';
+    ov.querySelectorAll('#zOut, #zIn, .zoom-val, .rbar .sep').forEach((el) => { el.hidden = true; });
+    M.play($('.rbar', ov), [{ transform: 'translateY(-24px)' }, { transform: 'none' }], { duration: M.SPRING.gentle.duration, easing: M.SPRING.gentle.easing });
+    return;
+  }
 
   // the cover dissolves into grains that bind together as page 1
   const from = $('.v-cover img') || $('.v-cover .blank-cover');

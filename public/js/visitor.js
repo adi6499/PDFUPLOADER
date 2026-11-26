@@ -6,6 +6,7 @@
 import { icon } from '/vendor/icons.js?v=3';
 import * as M from './motion.js';
 import { swallow, pourInto, sparkle } from './particles.js';
+import { sendTrack, sendInquiry } from './backend.js';
 
 const KEY = 'jd_visitor', ASKED = 'jd_dl_asked', SRC = 'jd_src';
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -47,9 +48,7 @@ export function source() {
 export function track(type, code = '') {
   try {
     const v = visitor();
-    const body = JSON.stringify({ type, code, device: device(), source: source(), visitor: v.name || v.email || v.phone ? v : undefined });
-    if (navigator.sendBeacon && navigator.sendBeacon('/api/track', new Blob([body], { type: 'application/json' }))) return;
-    fetch('/api/track', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body, keepalive: true }).catch(() => {});
+    sendTrack({ type, code, device: device(), source: source(), visitor: v.name || v.email || v.phone ? v : undefined });
   } catch {}
 }
 
@@ -159,10 +158,7 @@ export function querySheet({ code = '', title = '', from = null, onTop = false, 
     remember({ name: f.name, company: f.company, email: f.email, phone: f.phone });
     btn.disabled = true;
     try {
-      const r = await fetch('/api/inquiry', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ ...f, code, device: device(), source: source() }) });
-      const j = await r.json().catch(() => ({}));
-      if (!r.ok) throw new Error(j.error || 'Could not send. Please try again.');
+      await sendInquiry({ ...f, code, title, device: device(), source: source() });
     } catch (ex) {
       btn.disabled = false;
       err.textContent = (ex && ex.message) || 'Could not send. Please try again.';

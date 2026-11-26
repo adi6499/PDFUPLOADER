@@ -3,6 +3,7 @@
 import { icon } from '/vendor/icons.js?v=3';
 import * as M from './motion.js';
 import { swallow } from './particles.js';
+import { catPath } from './backend.js';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const byName = (a, b) => { const x = String(a).toLowerCase(), y = String(b).toLowerCase(); return x < y ? -1 : x > y ? 1 : 0; }; // A to Z, ignoring capitals
@@ -20,7 +21,7 @@ export function openMenu({ list = [], current = '', from = null } = {}) {
     <label class="searchbox cd-search"><span class="sr">Search</span>${icon('search')}<input class="ju-inp" type="search" placeholder="Search: bearings, couplings, Timken…" autocomplete="off"></label>
     ${brands.length > 1 ? `<div class="cd-chips"><button type="button" class="ju-chip on" data-b="">All</button>${brands.map((b) => `<button type="button" class="ju-chip" data-b="${esc(b)}">${esc(b)}</button>`).join('')}</div>` : ''}
     <nav class="cd-list">${list.map((c) => `
-      <a class="cd-item${c.code === current ? ' here' : ''}" href="/c/${esc(c.code)}" data-b="${esc(c.brand || '')}" data-q="${esc([c.title, c.brand, c.category, c.code].join(' ').toLowerCase())}"${c.code === current ? ' aria-current="page"' : ''}>
+      <a class="cd-item${c.code === current ? ' here' : ''}" href="${esc(catPath(c.code))}" data-b="${esc(c.brand || '')}" data-q="${esc([c.title, c.brand, c.category, c.code].join(' ').toLowerCase())}"${c.code === current ? ' aria-current="page"' : ''}>
         <span class="cd-thumb">${c.thumb ? `<img src="${esc(c.thumb)}" alt="" loading="lazy" decoding="async">` : icon(c.link ? 'external-link' : 'file-text')}</span>
         <span class="cd-text">${c.brand ? `<small>${esc(c.brand)}</small>` : ''}<b>${esc(c.title)}</b>
           ${c.code === current ? '<em>You are here</em>' : c.link ? '<em>Interactive guide</em>' : c.waiting ? '<em>PDF coming</em>' : ''}</span>

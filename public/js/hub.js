@@ -6,11 +6,12 @@ import { esc, ui, contactHtml, shareSheet, qrSheet, toast } from './site.js';
 import { cardHtml as card, sortCatalogs, brandsOf, hubEyebrow, chipsHtml } from './markup.js';
 import { saveFiles } from './handoff.js';
 import { track } from './visitor.js';
+import { catPath, teamPath, canUpload } from './backend.js';
 
 const $ = (s, el = document) => el.querySelector(s);
 const params = new URLSearchParams(location.search);
 const cat = params.get('cat');
-if (cat && /^[A-Za-z0-9-]{1,40}$/.test(cat)) location.replace('/c/' + cat.toLowerCase());
+if (cat && /^[A-Za-z0-9-]{1,40}$/.test(cat) && !catPath('x').includes('?')) location.replace(catPath(cat.toLowerCase()));
 
 const S = { all: [], brand: '', q: '', publicUrl: location.origin, site: {}, printable: true };
 
@@ -32,10 +33,10 @@ async function toTeam(files) {
   const pdfs = [...files].filter((f) => f.type === 'application/pdf' || /\.pdf$/i.test(f.name));
   if (!pdfs.length) { toast('Only PDF files can be uploaded.'); return; }
   try { await saveFiles(pdfs); } catch { /* the team page will ask to choose the file again */ }
-  location.href = '/team#upload';
+  location.href = teamPath + '#upload';
 }
-fetch('/api/info').then((r) => r.json()).then((inf) => {
-  if (!inf || !inf.auth || !inf.auth.signedIn) return;
+canUpload().then((ok) => {
+  if (!ok) return;
   const b = $('#hubUpload');
   b.innerHTML = icon('upload') + '<span>Upload PDF</span>';
   b.hidden = false;
@@ -114,7 +115,7 @@ let t = 0;
 $('#q').addEventListener('input', (e) => { clearTimeout(t); t = setTimeout(() => { S.q = e.target.value; draw(); }, 120); });
 $('#cards').addEventListener('click', (e) => {
   const q = e.target.closest('[data-qr]');
-  if (q) { const d = S.all.find((x) => x.code === q.dataset.qr); if (d) qrSheet({ link: `${S.publicUrl}/c/${d.code}`, title: d.title }); return; }
+  if (q) { const d = S.all.find((x) => x.code === q.dataset.qr); if (d) qrSheet({ link: `${S.publicUrl}${catPath(d.code)}`, title: d.title }); return; }
   if (e.target.closest('[data-reload]')) { location.reload(); return; }
   if (e.target.closest('[data-clear]')) { S.q = ''; S.brand = ''; $('#q').value = ''; document.querySelectorAll('#chips .ju-chip').forEach((c, i) => c.classList.toggle('on', i === 0)); draw(); }
 });

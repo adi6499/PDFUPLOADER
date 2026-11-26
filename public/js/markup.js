@@ -5,6 +5,7 @@
 // (the icons file is imported as ../vendor/icons.js?v=N, the same address as everywhere else: bump N here as well)
 import { icon } from '../vendor/icons.js?v=3';
 import { fmtSize } from './pdfkit.js';
+import { catPath } from './backend.js';
 
 export const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
@@ -38,7 +39,7 @@ export function cardHtml(d, i = 99) {
   const meta = d.waiting ? (d.sourceUrl ? 'On the maker’s website' : 'Coming soon')
     : [d.pages ? `${d.pages} pages` : null, fmtSize(d.size)].filter(Boolean).join(' · ');
   return `<article class="cat-card${d.waiting ? ' is-waiting' : ''}" data-key="${esc(d.code)}">
-    <a class="cc-link" href="/c/${esc(d.code)}" aria-label="${esc(d.title)}">
+    <a class="cc-link" href="${esc(catPath(d.code))}" aria-label="${esc(d.title)}">
       <div class="cc-cover">${d.cover ? `<img src="${esc(d.thumb || d.cover)}" alt="" width="${d.coverW || 720}" height="${d.coverH || 1018}" loading="${i < 4 ? 'eager' : 'lazy'}" decoding="async"${i < 2 ? ' fetchpriority="high"' : ''} style="view-transition-name:cover-${esc(d.code)}">` : blankCover(d)}</div>
       <div class="cc-body">
         <div class="cc-top">${d.brand ? `<span class="brand-pill">${esc(d.brand)}</span>` : ''}${d.category ? `<span class="cc-cat">${esc(d.category)}</span>` : ''}</div>

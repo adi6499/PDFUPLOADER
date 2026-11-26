@@ -7,6 +7,7 @@ import { qrSvg, qrSvgFile, qrPng, saveBlob } from './qr.js';
 import * as M from './motion.js';
 import { swallow, pourInto } from './particles.js';
 import { makeZip } from './zip.js';
+import { catPath } from './backend.js';
 
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const byName = (a, b) => { const x = String(a).toLowerCase(), y = String(b).toLowerCase(); return x < y ? -1 : x > y ? 1 : 0; }; // A to Z, ignoring capitals
@@ -18,7 +19,7 @@ export function openStudio({ catalogs = [], publicUrl = location.origin, site = 
   const base = String(publicUrl).replace(/\/$/, '');
   const entries = [
     { code: '', title: 'All catalogues (front page)', brand: site.company?.short || 'Jinharsh', link: base + '/' },
-    ...catalogs.map((c) => ({ code: c.code, title: c.title, brand: c.brand || '', link: `${base}/c/${c.code}`, waiting: !!c.waiting })),
+    ...catalogs.map((c) => ({ code: c.code, title: c.title, brand: c.brand || '', link: `${base}${catPath(c.code)}`, waiting: !!c.waiting })),
   ];
   const brands = [...new Set(catalogs.map((c) => c.brand).filter(Boolean))].sort(byName);
   const ov = document.createElement('div');

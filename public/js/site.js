@@ -13,6 +13,7 @@ import { copyText, showCopied, flashLink } from './copy.js';
 import { querySheet, setSite, track } from './visitor.js';
 import { enableMagnifier } from './magnify.js';
 import { esc, byName, brandHue, blankCover } from './markup.js';
+import { teamPath } from './backend.js';
 export { esc, byName, brandHue, blankCover };   // (made in markup.js, which the server uses too)
 // the top bar is a clear magnifying glass over the page (see magnify.js)
 try { enableMagnifier('.ju-top'); } catch { /* cosmetic */ }
@@ -95,7 +96,7 @@ export function contactHtml(SITE, title, code = '') {
     <div class="c-grid">${items.join('')}</div>
     <p class="addr">${C.address ? esc(C.address) + '<br>' : ''}${phones}</p>
   </section>
-  <footer class="v-foot">© ${new Date().getFullYear()} ${esc(SITE.company?.name || '')} · <a class="team-link" href="/team">${icon('upload')}Team: upload catalogues</a></footer>`;
+  <footer class="v-foot">© ${new Date().getFullYear()} ${esc(SITE.company?.name || '')} · <a class="team-link" href="${esc(teamPath)}">${icon('upload')}Team: upload catalogues</a>${(SITE.links || []).map((l) => ` · <a href="${esc(l.href)}" target="_blank" rel="noopener">${esc(l.label)}</a>`).join('')}</footer>`;
 }
 
 export async function share(title, url) {
