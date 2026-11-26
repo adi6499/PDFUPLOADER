@@ -48,6 +48,15 @@ await fs.writeFile(path.join(DEST, 'js', 'backend.js'), await read(path.join(HER
 const site = JSON.parse(await fs.readFile(path.join(ROOT, 'site.json'), 'utf8'));
 site.contact = { ...site.contact, whatsapp: '912240900000' };   // the hub's WhatsApp line
 site.links = [{ label: 'Technical Wiki', href: 'https://catalog.jinharsh.co.in/index.php/Product_Range' }];
+// the hub's own top-bar buttons, as on its old page: Send Query, QR Studio, Team Portal, Technical Wiki, jinharsh.com
+site.nav = {
+  query: true, studio: true,
+  links: [
+    { label: 'Team Portal', href: '/hub/team.html' },
+    { label: 'Technical Wiki', href: 'https://catalog.jinharsh.co.in/index.php/Product_Range', external: true },
+    { label: 'jinharsh.com', href: 'https://www.jinharsh.com', external: true },
+  ],
+};
 await fs.writeFile(path.join(DEST, 'js', 'boot.js'), (await read(path.join(HERE, 'boot.js'))).replace('/*SITE*/{}', JSON.stringify(site)));
 
 // every module a page imports must be here
