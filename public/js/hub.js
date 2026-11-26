@@ -1,6 +1,6 @@
 // The front page: every live catalogue, with brand filters and search.
 // Links from the old catalog.jinharsh.com hub keep working: /?cat=<name> opens that catalogue.
-import { icon } from '/vendor/icons.js?v=2';
+import { icon } from '/vendor/icons.js?v=3';
 import { fmtSize } from './pdfkit.js';
 import * as M from './motion.js';
 import { esc, ui, contactHtml, shareSheet, qrSheet, blankCover, toast } from './site.js';

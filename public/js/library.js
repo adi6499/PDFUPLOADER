@@ -1,6 +1,6 @@
 // The team's screen: upload PDFs, see each one's permanent QR code, replace files, archive.
 // Every QR carries the Jinharsh logo in the middle.
-import { icon } from '/vendor/icons.js?v=2';
+import { icon } from '/vendor/icons.js?v=3';
 import * as API from './api.js';
 import { qrSvg, qrSvgFile, qrPng, saveBlob } from './qr.js';
 import { inspectPdf, fmtSize, makeThumb } from './pdfkit.js';
@@ -709,14 +709,13 @@ function confirmSheet({ title, text, yes, onYes, leaving = null }) {
 }
 
 function settingsSheet() {
-  let mode = 'auto'; try { mode = localStorage.getItem('jui_dark') || 'auto'; } catch {}
-  if (mode === '1') mode = 'dark'; else if (mode === '0') mode = 'light';
+  const mode = window.JDTheme ? JDTheme.mode() : 'light';
   const glass = (() => { try { return +(localStorage.getItem('jui_glass') ?? 100); } catch { return 100; } })();
   const signedIn = S.auth && S.auth.passwordSet;
   const sh = openSheet(`${closeBtn()}
     <div class="sheet-head"><div class="grow"><h2>Settings</h2><p>These choices are kept on this device.</p></div></div>
-    <div class="setting"><div class="grow"><b>Appearance</b><small>Auto follows this device</small></div>
-      <div class="ju-seg" id="setMode">${['auto', 'light', 'dark'].map((m) => `<button type="button" data-m="${m}" class="${mode === m ? 'on' : ''}">${m[0].toUpperCase() + m.slice(1)}</button>`).join('')}</div></div>
+    <div class="setting"><div class="grow"><b>Appearance</b><small>Follow the sun: light by day, a warm sunset, dark at night</small></div>
+      <div class="ju-seg" id="setMode">${[['light', 'Light'], ['sun', 'Sun'], ['dark', 'Dark']].map(([m, l]) => `<button type="button" data-m="${m}" class="${mode === m ? 'on' : ''}">${l}</button>`).join('')}</div></div>
     <div class="setting"><div class="grow"><b>Glass</b><small>0 solid · 30 frosted · 100 clear</small></div><input type="range" min="0" max="100" value="${glass}" id="setGlass" aria-label="Glass"></div>
     <div class="setting"><div class="grow"><b>Address inside every QR code</b><small class="mono">${esc(S.publicUrl)}</small><br><small>${S.printable ? 'This is the real address. Codes are final.' : 'Preview address. Codes become final once the site is online.'}</small></div></div>
     <div class="setting"><div class="grow"><b>Team sign-in</b><small>${signedIn ? 'Signed in on this device for 30 days.' : 'No team password yet: open only on this computer.'}</small></div>${signedIn ? '<button class="ju-btn sm" type="button" id="signOut">Sign out</button>' : ''}</div>
@@ -724,7 +723,7 @@ function settingsSheet() {
   $('#setMode', sh).addEventListener('click', (e) => {
     const b = e.target.closest('button[data-m]'); if (!b) return;
     const m = b.dataset.m, r = b.getBoundingClientRect();
-    M.themeSwitch(r.left + r.width / 2, r.top + r.height / 2, () => { ui(() => JUI.setDark(m === 'auto' ? 'auto' : m === 'dark')); paintThemeBtn(); });
+    M.themeSwitch(r.left + r.width / 2, r.top + r.height / 2, () => { ui(() => JDTheme.set(m)); paintThemeBtn(); });
     sh.querySelectorAll('#setMode button').forEach((x) => x.classList.toggle('on', x === b));
   });
   $('#setGlass', sh).addEventListener('input', (e) => ui(() => JUI.setGlass(e.target.value)));
@@ -735,9 +734,10 @@ function settingsSheet() {
 }
 
 function paintThemeBtn() {
-  const dark = document.documentElement.classList.contains('dark');
-  $('#themeBtn').innerHTML = icon(dark ? 'sun' : 'moon');
-  $('#themeBtn').setAttribute('aria-label', dark ? 'Switch to light' : 'Switch to dark');
+  const m = window.JDTheme ? JDTheme.mode() : 'light';
+  $('#themeBtn').innerHTML = icon({ light: 'sun', sun: 'sunset', dark: 'moon' }[m]);
+  $('#themeBtn').setAttribute('aria-label', 'Look: ' + (window.JDTheme ? JDTheme.label(m) : 'Light'));
+  $('#themeBtn').title = window.JDTheme ? JDTheme.label(m) : 'Light';
 }
 
 // ---------- wiring ----------
@@ -749,10 +749,9 @@ function wire() {
   $('#settingsBtn').addEventListener('click', settingsSheet);
   $('#themeBtn').addEventListener('click', (e) => {
     const r = e.currentTarget.getBoundingClientRect();
-    M.themeSwitch(r.left + r.width / 2, r.top + r.height / 2, () => {
-      ui(() => JUI.setDark(!document.documentElement.classList.contains('dark')));
-      paintThemeBtn();
-    });
+    const next = window.JDTheme ? JDTheme.next() : 'light';
+    M.themeSwitch(r.left + r.width / 2, r.top + r.height / 2, () => { ui(() => JDTheme.set(next)); paintThemeBtn(); });
+    toast(window.JDTheme ? JDTheme.label(next) : 'Light');
   });
   $('#search').addEventListener('input', (e) => { S.query = e.target.value; renderList(); });
   $('#tiles').addEventListener('click', (e) => {

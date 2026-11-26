@@ -3,7 +3,7 @@
 //   beforeDownload({ from }, go)   the first download on this device: an optional "who's downloading?" window, then go()
 //   querySheet({ code, title, from, message })   "Send a query": name, company, email or phone, message
 // What a visitor types is remembered on this device, so they type it only once, and goes with their next visits.
-import { icon } from '/vendor/icons.js?v=2';
+import { icon } from '/vendor/icons.js?v=3';
 import * as M from './motion.js';
 import { swallow, pourInto, sparkle } from './particles.js';
 

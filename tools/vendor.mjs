@@ -50,7 +50,7 @@ const ICONS = ['upload', 'qr-code', 'link', 'download', 'share-2', 'external-lin
   'book-open', 'arrow-down-to-line', 'monitor', 'smartphone', 'sliders-horizontal', 'circle-alert', 'image',
   'pencil', 'arrow-left', 'arrow-up', 'maximize-2', 'zoom-in', 'zoom-out', 'circle-check', 'id-card', 'map-pin', 'file-down',
   'chart-column', 'users', 'message-square-text', 'calendar-days', 'file-spreadsheet', 'menu', 'play', 'video', 'wrench', 'badge-check',
-  'layout-grid', 'send', 'user', 'building-2', 'chevron-right'];
+  'layout-grid', 'send', 'user', 'building-2', 'chevron-right', 'sunset'];
 const map = {};
 for (const name of ICONS) {
   const svg = readFileSync(join(nm, 'lucide-static', 'icons', name + '.svg'), 'utf8');

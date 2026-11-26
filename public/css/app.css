@@ -449,3 +449,13 @@ html.lite.ju.dark .ju-overlay { background: rgba(0, 0, 0, .62); }
 .me-row { display: grid; grid-template-columns: 170px 1fr 1.3fr 40px; gap: 8px; align-items: center; }
 .me-row .ju-inp { height: 40px; min-width: 0; background: var(--card); }
 @media (max-width: 640px) { .me-row { grid-template-columns: 1fr 40px; } .me-row [data-f="title"], .me-row [data-f="url"] { grid-column: 1 / 2; } .me-row [data-del] { grid-row: 1; grid-column: 2; } }
+
+/* the top bar's magnifying glass (magnify.js): a touch brighter in dark mode, never glowing */
+:root { --mag-bright: 1; }
+.dark { --mag-bright: 1.06; }
+
+/* Follow the sun (theme-boot.js): the background drifts between small steps every half minute; the switch between
+   light and dark at sunset and sunrise is a slow cross-fade. A choice made by hand stays instant. */
+html[data-sky] body { transition: background-color 28s linear; }
+html.vt-theme body, html.vt-sky body { transition: none; }
+html.vt-sky::view-transition-old(root), html.vt-sky::view-transition-new(root) { animation-duration: 2.8s; animation-timing-function: ease-in-out; }

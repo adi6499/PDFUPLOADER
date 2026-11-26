@@ -1,7 +1,7 @@
 // "Watch & learn" on a catalogue's page: product videos, installation videos, and trials & recommendations
 // (proof from real plants). The team adds them under Edit details. YouTube and Vimeo videos play in a window over
 // the page (YouTube without its tracking cookies); anything else opens in a new tab.
-import { icon } from '/vendor/icons.js?v=2';
+import { icon } from '/vendor/icons.js?v=3';
 import * as M from './motion.js';
 import { swallow, pourInto } from './particles.js';
 import { track } from './visitor.js';

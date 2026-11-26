@@ -397,12 +397,12 @@ export function bindImage(fromEl, toEl, { cols = 46, sample = null } = {}) {
         const tx = b.left + i * cwB, ty = b.top + j * chB;
         const dist = Math.hypot(tx - (b.left + b.width / 2), ty - (b.top + b.height / 2)) / (Math.hypot(b.width, b.height) / 2);
         parts.push({ sx, sy, mx: sx + Math.cos(ang) * d, my: sy + Math.sin(ang) * d, tx, ty, col,
-          d1: Math.random() * 120, d2: 380 + dist * 260 + Math.random() * 160 });
+          d1: Math.random() * 40, d2: 110 + dist * 100 + Math.random() * 50 }); // about half a second in all
       }
       const t0 = performance.now();
       let done = false;
       const finish = () => { if (done) return; done = true; cv.remove(); reveal(); };
-      setTimeout(finish, 2400); // the timer that always shows the page
+      setTimeout(finish, 1100); // the timer that always shows the page
       const frame = (now) => {
         if (done) return;
         frameCheck(now);
@@ -411,10 +411,10 @@ export function bindImage(fromEl, toEl, { cols = 46, sample = null } = {}) {
         let busy = false;
         for (const p of parts) {
           let x, y, w, h;
-          const t2 = clamp01((el - p.d2) / 700);
+          const t2 = clamp01((el - p.d2) / 250);
           if (t2 <= 0) {
             // 1. the cover dissolves: grains drift apart and shrink
-            const t1 = easeInOut(clamp01((el - p.d1) / 420));
+            const t1 = easeInOut(clamp01((el - p.d1) / 150));
             x = lerp(p.sx, p.mx, t1); y = lerp(p.sy, p.my, t1);
             w = lerp(cwA, GRAIN, t1); h = lerp(chA, GRAIN, t1);
             busy = true;
@@ -469,11 +469,11 @@ export function formPage(pageEl, canvas, { cols = 44, maxAtOnce = 3 } = {}) {
         const k = (j * cols + i) * 4, ang = Math.random() * Math.PI * 2, d = 24 + Math.random() * r0.width * 0.5;
         parts.push({ i, j, r: px[k], g: px[k + 1], b: px[k + 2], own: `rgb(${px[k]},${px[k + 1]},${px[k + 2]})`,
           dx: Math.cos(ang) * d, dy: Math.sin(ang) * d + r0.height * 0.06,
-          delay: (j / rows) * 340 + Math.random() * 140, dur: 460 + Math.random() * 180 });
+          delay: (j / rows) * 140 + Math.random() * 50, dur: 230 + Math.random() * 80 }); // about half a second in all
       }
-      const t0 = performance.now(), FADE = 220;
+      const t0 = performance.now(), FADE = 110;
       let landed = 0;
-      const hard = setTimeout(() => { uncount(); show(); }, 2600); // the timer that always shows the page
+      const hard = setTimeout(() => { uncount(); show(); }, 1100); // the timer that always shows the page
       fxAdd({
         draw(g, dpr, now) {
           const b = pageEl.getBoundingClientRect();

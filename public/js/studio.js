@@ -2,7 +2,7 @@
 // front page. Each can be saved as a picture (PNG) or a print file (SVG), or made into a visiting card; "Download all"
 // saves every code in one ZIP. Opens from the QR button on the front page, or straight away at /?qr=1.
 // The codes are the permanent /c/<code> links: printed once, they keep working when a PDF is replaced.
-import { icon } from '/vendor/icons.js?v=2';
+import { icon } from '/vendor/icons.js?v=3';
 import { qrSvg, qrSvgFile, qrPng, saveBlob } from './qr.js';
 import * as M from './motion.js';
 import { swallow, pourInto } from './particles.js';

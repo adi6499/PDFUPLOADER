@@ -1,5 +1,5 @@
 // Pieces shared by the two public pages (the front page of all catalogues, and each catalogue's page).
-import { icon } from '/vendor/icons.js?v=2';
+import { icon } from '/vendor/icons.js?v=3';
 import { qrSvg, qrSvgFile, qrPng, saveBlob } from './qr.js';
 import * as M from './motion.js';
 import { assemble, enableHoverScatter, enableButtonParticles, swallow, sparkle } from './particles.js';
@@ -11,6 +11,9 @@ export const warmModule = (href) => { try { if (document.querySelector(`link[rel
 idle(() => warmModule('/js/card.js'), 2500);
 import { copyText, showCopied, flashLink } from './copy.js';
 import { querySheet, setSite, track } from './visitor.js';
+import { enableMagnifier } from './magnify.js';
+// the top bar is a clear magnifying glass over the page (see magnify.js)
+try { enableMagnifier('.ju-top'); } catch { /* cosmetic */ }
 
 enableHoverScatter();    // big QR codes: the grains scatter away from the mouse or finger
 enableButtonParticles(); // every button press sprays a few grains; download buttons pour them in
@@ -18,22 +21,25 @@ enableButtonParticles(); // every button press sprays a few grains; download but
 // closing a window: it floats away as soft grains from where you pressed X, while the veil clears
 // light / dark: the sun or moon in the top bar; the new look spreads out in a circle from it.
 // Until it is pressed the page follows the phone's own setting; afterwards the choice is kept on this device.
+// The sun / moon button: Light (the default) -> Follow the sun -> Dark. The icon shows the choice now; the new look
+// spreads out in a circle from the button. (theme-boot.js does the work, including following the sun.)
+export const THEME_ICON = { light: 'sun', sun: 'sunset', dark: 'moon' };
+const THEME_TIP = { light: 'Light', sun: 'Follow the sun: light by day, a warm sunset, dark at night', dark: 'Dark' };
 function wireTheme() {
   const b = document.getElementById('themeTop');
-  if (!b) return;
+  if (!b || !window.JDTheme) return;
   const paint = () => {
-    const dark = document.documentElement.classList.contains('dark');
-    b.innerHTML = icon(dark ? 'sun' : 'moon');
-    b.setAttribute('aria-label', dark ? 'Switch to light' : 'Switch to dark');
-    b.title = dark ? 'Light mode' : 'Dark mode';
+    const m = JDTheme.mode(), next = JDTheme.next(m);
+    b.innerHTML = icon(THEME_ICON[m]);
+    b.setAttribute('aria-label', `Look: ${JDTheme.label(m)}. Change to ${JDTheme.label(next)}`);
+    b.title = THEME_TIP[m];
   };
   paint();
   b.addEventListener('click', () => {
-    const r = b.getBoundingClientRect();
-    M.themeSwitch(r.left + r.width / 2, r.top + r.height / 2, () => {
-      try { JUI.setDark(!document.documentElement.classList.contains('dark')); } catch {}
-      paint();
-    });
+    const r = b.getBoundingClientRect(), next = JDTheme.next();
+    M.themeSwitch(r.left + r.width / 2, r.top + r.height / 2, () => { JDTheme.set(next); paint(); });
+    M.bump(b, 1.15);
+    toast(THEME_TIP[next]);
   });
 }
 try { wireTheme(); } catch { /* cosmetic */ }

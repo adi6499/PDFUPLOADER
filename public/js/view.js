@@ -1,6 +1,6 @@
 // A catalogue's own page: what a scanned QR code opens. The server puts the catalogue's details into the page
 // itself (id="boot"), so the cover and title show at once; the PDF pages are then drawn as they come near the screen.
-import { icon } from '/vendor/icons.js?v=2';
+import { icon } from '/vendor/icons.js?v=3';
 import { pdfjs, PDF_OPTS, fmtSize } from './pdfkit.js';
 import * as M from './motion.js';
 import { esc, ui, contactHtml, shareSheet, qrSheet, blankCover, idle, warmModule } from './site.js';

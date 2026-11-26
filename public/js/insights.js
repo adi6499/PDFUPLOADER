@@ -1,7 +1,7 @@
 // "Visitors & queries" on the team page: who opened, read and downloaded which catalogue, the queries visitors
 // sent (with one-tap call, WhatsApp and email), the numbers per catalogue, the last 30 days, the exhibition dates,
 // and Excel (CSV) copies of the visits and the queries. The data comes from /api/insights (server/activity.mjs).
-import { icon } from '/vendor/icons.js?v=2';
+import { icon } from '/vendor/icons.js?v=3';
 import * as M from './motion.js';
 import { swallow, pourInto } from './particles.js';
 
