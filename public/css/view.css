@@ -166,3 +166,7 @@
 .reader-ov .page { transition: background-color .25s ease, box-shadow .35s ease; }
 .reader-ov .page.forming { background: transparent !important; box-shadow: none !important; transition: none; }
 .reader-ov .page.forming .pno { opacity: 0; }
+
+/* slower phones: the reader backdrop is solid instead of blurred */
+html.lite .reader-ov { background: rgba(12, 12, 14, .97); }
+html.lite:not(.dark) .reader-ov { background: rgba(238, 238, 242, .98); }

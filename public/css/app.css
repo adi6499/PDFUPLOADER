@@ -325,3 +325,18 @@ html.vt-theme::view-transition-old(root), html.vt-theme::view-transition-new(roo
 .card-btns .ju-btn.primary { flex: 2 1 auto; }
 .card-foot { margin: 12px auto 0; max-width: 470px; font-size: 12.5px; line-height: 1.5; }
 @media (prefers-reduced-motion: reduce) { .card-flip, .card-tilt { transition: none; } }
+
+/* "Copied": a tick that draws itself, in green */
+.i-draw path { stroke-dasharray: 24; stroke-dashoffset: 24; animation: jd-draw .5s .06s cubic-bezier(.3, .7, .2, 1) forwards; }
+@keyframes jd-draw { to { stroke-dashoffset: 0; } }
+.copied, .copied .i, .ju-btn.copied .i { color: var(--ok, #16a34a); }
+.cp-t { display: inline-block; }
+@media (prefers-reduced-motion: reduce) { .i-draw path { animation: none; stroke-dashoffset: 0; } }
+
+/* slower phones (html.lite, set by particles.js): no frosted blur, the most expensive thing to draw;
+   the panels get a solid look instead */
+html.lite .ju-glass, html.lite .ju-overlay, html.lite .ju-toast, html.lite .drop-veil, html.lite .reader-ov {
+  -webkit-backdrop-filter: none !important; backdrop-filter: none !important; }
+html.lite.ju .ju-glass, html.lite.ju .ju-sheet, html.lite.ju .ju-pane { background: var(--card); }
+html.lite.ju .ju-overlay { background: rgba(20, 22, 28, .5); }
+html.lite.ju.dark .ju-overlay { background: rgba(0, 0, 0, .62); }

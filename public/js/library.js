@@ -9,6 +9,7 @@ import { blankCover } from './site.js';
 import { collapseFrom, assemble, enableHoverScatter, enableButtonParticles, swallow } from './particles.js';
 import { takeFiles } from './handoff.js';
 import { cardSheet } from './card.js';
+import { copyText, showCopied, flashLink } from './copy.js';
 
 const $ = (s, el = document) => el.querySelector(s);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -556,15 +557,9 @@ async function startReplace(file) {
 
 // ---------- small actions ----------
 async function copyLink(link, btn) {
-  try {
-    await navigator.clipboard.writeText(link);
-    toast('Link copied');
-    if (btn) {
-      const was = btn.innerHTML;
-      btn.innerHTML = icon('check'); btn.style.color = 'var(--ok)'; M.bump(btn, 1.2);
-      setTimeout(() => { btn.innerHTML = was; btn.style.color = ''; }, 1500);
-    }
-  } catch { window.prompt('Copy this link:', link); }
+  if (!(await copyText(link))) { window.prompt('Copy this link:', link); return; }
+  toast('Link copied');
+  if (btn) { showCopied(btn, { ms: 1500 }); flashLink(btn.closest('.linkline')?.querySelector('a')); }
 }
 
 function fileBase(d) { return `QR ${d.title} (${d.code})`.replace(/[\\/:*?"<>|]+/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 100); }

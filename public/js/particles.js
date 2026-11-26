@@ -22,8 +22,44 @@ const easeOutBack = (t) => { const c1 = 1.25, c3 = c1 + 1; return 1 + c3 * Math.
 // one formula for the collapse and the swirl after it, so the cluster never jumps
 const swirlAngle = (p, el, e) => p.ang + p.spin * (1.4 * e + (el / 900) * e);
 const colour = (t) => `rgb(${Math.round(lerp(ORANGE[0], INK[0], t))},${Math.round(lerp(ORANGE[1], INK[1], t))},${Math.round(lerp(ORANGE[2], INK[2], t))})`;
+// ---------- how much the phone can take ----------
+// Slower phones get lighter effects: about half the grains, and the see-through drawing layers at a lower
+// resolution. Decided from what the phone says about itself (processor cores, memory, data saver) and from how
+// smoothly the effects really run: if frames keep arriving late, everything after switches to the lighter kind,
+// and the phone is remembered for a week. html.lite also turns off the frosted blur (see app.css).
+const LITE_KEY = 'jd-lite';
+export const perf = { lite: false };
+try {
+  const nav = navigator, cores = nav.hardwareConcurrency || 8, mem = nav.deviceMemory || 8;
+  const save = !!(nav.connection && nav.connection.saveData);
+  let seen = 0;
+  try { seen = Number(localStorage.getItem(LITE_KEY)) || 0; } catch {}
+  perf.lite = save || mem <= 3 || cores <= 4 || Date.now() - seen < 7 * 864e5;
+  if (perf.lite) document.documentElement.classList.add('lite');
+} catch {}
+function goLite() {
+  if (perf.lite) return;
+  perf.lite = true;
+  try { document.documentElement.classList.add('lite'); } catch {}
+  try { localStorage.setItem(LITE_KEY, String(Date.now())); } catch {}
+}
+// every animation frame passes through here; 9 late frames (under 25 a second) out of 24 = a slow phone
+let lastFrame = 0, frames = 0, late = 0;
+function frameCheck(now) {
+  if (perf.lite || !now || now === lastFrame) return;
+  const d = now - lastFrame;
+  lastFrame = now;
+  if (d > 250 || document.visibilityState !== 'visible') { frames = late = 0; return; } // asleep, not slow
+  frames++;
+  if (d > 40) late++;
+  if (frames >= 24) { if (late >= 9) goLite(); frames = late = 0; }
+}
+const many = (n) => (perf.lite ? Math.max(12, Math.round(n * 0.45)) : n);          // fewer loose grains
+const fewerCols = (c) => (perf.lite ? Math.max(16, Math.round(c * 0.68)) : c);   // about half the cells
+const layerDpr = () => Math.min(window.devicePixelRatio || 1, perf.lite ? 1.25 : 2);
 // how many grains along each side of one QR square: 2 x 2 on phones, 3 x 3 when the squares are big
-const grainsPer = (k) => (k >= 7 ? 3 : 2);
+// (one grain per square, or 2 x 2 for big ones, on slower phones)
+const grainsPer = (k) => (perf.lite ? (k >= 7 ? 2 : 1) : (k >= 7 ? 3 : 2));
 const GRAIN = 1.8; // size of a loose grain while it flies
 
 // where every grain of the QR inside `tile` sits on screen (each dark square split into grainsPer x grainsPer)
@@ -45,7 +81,7 @@ function makeCanvas() {
   const cv = document.createElement('canvas');
   cv.setAttribute('aria-hidden', 'true');
   Object.assign(cv.style, { position: 'fixed', inset: '0', width: '100vw', height: '100vh', zIndex: '95', pointerEvents: 'none' });
-  const dpr = window.devicePixelRatio || 1;
+  const dpr = layerDpr();
   cv.width = Math.round(innerWidth * dpr); cv.height = Math.round(innerHeight * dpr);
   const g = cv.getContext('2d');
   document.body.appendChild(cv);
@@ -77,6 +113,7 @@ function swarm() {
 
   function frame(now) {
     if (ended) return;
+    frameCheck(now);
     const g = canvas.g, dpr = canvas.dpr;
     g.clearRect(0, 0, canvas.cv.width, canvas.cv.height);
     const el = now - t0;
@@ -191,7 +228,7 @@ export function assemble(tile, link, { from = null } = {}) {
   if (!c || calm()) return;
   const s = swarm();
   const R = Math.max(innerWidth, innerHeight) * 0.42;
-  const n = Math.min(c.cells.length, 1800);
+  const n = Math.min(c.cells.length, perf.lite ? 700 : 1800);
   const fr = from && from.getBoundingClientRect ? from.getBoundingClientRect() : null;
   const pts = Array.from({ length: n }, () => {
     if (fr && fr.width) {
@@ -250,7 +287,7 @@ function scatter(tile, svg, link, firstEvent) {
   if (getComputedStyle(tile).position === 'static') tile.style.position = 'relative';
   const cv = document.createElement('canvas');
   cv.setAttribute('aria-hidden', 'true');
-  const dpr = window.devicePixelRatio || 1;
+  const dpr = layerDpr();
   cv.width = Math.round(r.width * dpr); cv.height = Math.round(r.height * dpr);
   // (an SVG picture has no offsetLeft/offsetTop, so measure it against the tile it sits in)
   const tb = tile.getBoundingClientRect();
@@ -289,8 +326,9 @@ function scatter(tile, svg, link, firstEvent) {
     tile.__scatter = null;
   }
   function wake() { if (!raf && !stopped) raf = requestAnimationFrame(step); }
-  function step() {
+  function step(now) {
     raf = 0;
+    frameCheck(now);
     if (!tile.isConnected) { stop(); return; }
     const pushing = P.down || (P.last && performance.now() - P.last < HOLD);
     g.clearRect(0, 0, cv.width, cv.height);
@@ -328,6 +366,7 @@ function scatter(tile, svg, link, firstEvent) {
 // then bind together as the first page of the reader. `toEl` stays hidden until they have landed;
 // a timer always shows it, and "reduce motion" just shows it.
 export function bindImage(fromEl, toEl, { cols = 46, sample = null } = {}) {
+  cols = fewerCols(cols);
   return new Promise((resolve) => {
     const reveal = () => { try { toEl.style.visibility = ''; } catch {} resolve(); };
     try {
@@ -366,6 +405,7 @@ export function bindImage(fromEl, toEl, { cols = 46, sample = null } = {}) {
       setTimeout(finish, 2400); // the timer that always shows the page
       const frame = (now) => {
         if (done) return;
+        frameCheck(now);
         const el = now - t0;
         g.clearRect(0, 0, cv.width, cv.height);
         let busy = false;
@@ -405,6 +445,8 @@ export function bindImage(fromEl, toEl, { cols = 46, sample = null } = {}) {
 // Never more than a few pages at once (fast scrolling just shows them), and the page is always shown in the end.
 let pagesForming = 0;
 export function formPage(pageEl, canvas, { cols = 44, maxAtOnce = 3 } = {}) {
+  cols = fewerCols(cols);
+  if (perf.lite) maxAtOnce = 1;
   return new Promise((resolve) => {
     let shown = false;
     const show = () => { if (shown) return; shown = true; try { canvas.style.visibility = ''; pageEl.classList.remove('forming'); } catch {} resolve(); };
@@ -480,6 +522,7 @@ function fxAdd(item) {
 function fxClear() { if (!fx) return; cancelAnimationFrame(fx.raf); fx.items.forEach((it) => it.end && it.end()); fx.cv.remove(); fx = null; }
 function fxFrame(now) {
   if (!fx) return;
+  frameCheck(now);
   fx.raf = 0;
   const { g, cv, dpr } = fx;
   g.clearRect(0, 0, cv.width, cv.height);
@@ -511,6 +554,7 @@ function colourOf(el) {
 // `el` is hidden at once; the promise ends when the hole has closed. `sample` (a canvas or picture) gives the grains
 // their colours; otherwise they take the colour of the panel itself.
 export function swallow(el, { sample = null, cols = 48, at = null } = {}) {
+  cols = fewerCols(cols);
   return new Promise((resolve) => {
     try {
       if (calm() || !el) { resolve(); return; }
@@ -593,6 +637,7 @@ export const dissolve = swallow;
 // then drains away. Drawn on top of the button; the button itself is never changed.
 function radiusOf(el) { try { return parseFloat(getComputedStyle(el).borderTopLeftRadius) || 0; } catch { return 0; } }
 export function fillButton(btn, { fromRect = null, n = 56, onDone } = {}) {
+  n = many(n);
   if (calm() || !btn) { if (onDone) onDone(); return; }
   const b = btn.getBoundingClientRect();
   if (!b.width) { if (onDone) onDone(); return; }
@@ -652,6 +697,7 @@ export function fillButton(btn, { fromRect = null, n = 56, onDone } = {}) {
 // A card turning over shakes a little dust off its edges: while it turns, grains fly out sideways from its left and
 // right edges (which swing in towards the middle and out again), drift down and fade.
 export function cardDust(el, { n = 90, turnMs = 800 } = {}) {
+  n = many(n);
   if (calm() || !el) return;
   const r = el.getBoundingClientRect();
   if (!r.width) return;
@@ -688,6 +734,7 @@ export function cardDust(el, { n = 90, turnMs = 800 } = {}) {
 let buttonsInstalled = false;
 const DOWNLOAD = 'a[download], [data-dl], [data-png], [data-svg], [data-act="svg"], [data-act="png"], [data-card-svg], [data-card-png], [data-card-pdf]';
 const CLOSING = '[data-x], [data-sheet="close"], #rClose, .close-x';
+const COPY = '[data-copy], [data-act="copy"]';
 export function enableButtonParticles() {
   if (buttonsInstalled) return;
   buttonsInstalled = true;
@@ -696,6 +743,12 @@ export function enableButtonParticles() {
     const btn = e.target && e.target.closest && e.target.closest('button, .ju-btn, .ju-icon, .share-opt, .c-item, .ju-chip, .ju-tile');
     if (!btn || btn.disabled || btn.matches(CLOSING)) return;
     try {
+      if (btn.matches(COPY)) {
+        const holder = btn.closest('.linkline, .ju-sheet, .detail, .done');
+        const src = holder ? holder.querySelector('.qr-link, .linkline a') : null;
+        fillButton(btn, { fromRect: src ? src.getBoundingClientRect() : null, n: 50 });
+        return;
+      }
       if (btn.matches(DOWNLOAD)) {
         const holder = btn.closest('.ju-sheet, .detail, .done');
         // (in the card window this finds the whole card first: it comes before the QR on it)

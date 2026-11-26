@@ -4,6 +4,7 @@ import { qrSvg, qrSvgFile, qrPng, saveBlob } from './qr.js';
 import * as M from './motion.js';
 import { assemble, enableHoverScatter, enableButtonParticles, swallow } from './particles.js';
 import { cardSheet } from './card.js';
+import { copyText, showCopied, flashLink } from './copy.js';
 
 enableHoverScatter();    // big QR codes: the grains scatter away from the mouse or finger
 enableButtonParticles(); // every button press sprays a few grains; download buttons pour them in
@@ -71,7 +72,7 @@ export async function share(title, url) {
   if (navigator.share) {
     try { await navigator.share({ title, text: title, url }); return; } catch (e) { if (e && e.name === 'AbortError') return; }
   }
-  try { await navigator.clipboard.writeText(url); toast('Link copied'); } catch { window.prompt('Copy this link:', url); }
+  if (await copyText(url)) toast('Link copied'); else window.prompt('Copy this link:', url);
 }
 
 // The Share window: grains burst out of the Share button and bind together as the QR code,
@@ -117,7 +118,7 @@ export function shareSheet({ link, title, from = null, site = {}, printable = tr
     const b = e.target.closest('.share-opt'); if (!b) return;
     M.bump(b.querySelector('.so-ic'), 1.15);
     if (b.matches('[data-copy]')) {
-      try { await navigator.clipboard.writeText(link); toast('Link copied'); b.querySelector('span:last-child').textContent = 'Copied'; } catch { window.prompt('Copy this link:', link); }
+      if (await copyText(link)) { toast('Link copied'); showCopied(b); flashLink(ov.querySelector('.qr-link')); } else window.prompt('Copy this link:', link);
     }
     if (b.matches('[data-png]')) { saveBlob(await qrPng(link, true, 2000), `QR ${safe}.png`); toast('QR picture saved'); }
     if (b.matches('[data-more]')) { try { await navigator.share({ title, text: title, url: link }); } catch {} }
@@ -163,8 +164,9 @@ export function qrSheet({ link, title }) {
     if (b.matches('[data-png]')) { M.nudgeDown(b.querySelector('.i')); saveBlob(await qrPng(link, true, 2000), `QR ${safe}.png`); toast('QR picture saved'); }
     if (b.matches('[data-svg]')) { saveBlob(new Blob([await qrSvgFile(link, true)], { type: 'image/svg+xml' }), `QR ${safe}.svg`); toast('Saved: best for printing'); }
     if (b.matches('[data-copy]')) {
-      try { await navigator.clipboard.writeText(link); toast('Link copied'); b.innerHTML = icon('check') + 'Copied'; M.bump(b.querySelector('.i'), 1.25); } catch { window.prompt('Copy this link:', link); }
+      if (await copyText(link)) { toast('Link copied'); showCopied(b); flashLink(ov.querySelector('.qr-link')); } else window.prompt('Copy this link:', link);
     }
   });
   assemble(ov.querySelector('.qr-big'), link);
+  M.rise(sheet.querySelectorAll('h2, .qr-link, .btns > .ju-btn, .qr-hint'), { delay: 160, step: 55 });
 }

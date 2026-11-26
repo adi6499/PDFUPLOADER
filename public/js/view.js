@@ -4,7 +4,7 @@ import { icon } from '/vendor/icons.js';
 import { pdfjs, PDF_OPTS, fmtSize } from './pdfkit.js';
 import * as M from './motion.js';
 import { esc, ui, contactHtml, shareSheet, qrSheet, blankCover } from './site.js';
-import { bindImage, swallow, formPage } from './particles.js';
+import { bindImage, swallow, formPage, perf } from './particles.js';
 
 const $ = (s, el = document) => el.querySelector(s);
 
@@ -235,7 +235,8 @@ async function startReader(pagesEl, scroller, box) {
     formPage(el, cv);
   };
   let busy = false;
-  const quality = () => Math.min(3, (window.devicePixelRatio || 1) * 1.35);
+  // sharper than the screen for crisp text; on slower phones just sharp enough (half the memory per page)
+  const quality = () => (perf.lite ? Math.min(2, (window.devicePixelRatio || 1) * 1.1) : Math.min(3, (window.devicePixelRatio || 1) * 1.35));
 
   async function draw(el) {
     const num = Number(el.dataset.n);
@@ -294,7 +295,7 @@ async function startReader(pagesEl, scroller, box) {
       if (e.isIntersecting) near.add(num); else { near.delete(num); release(num); }
     }
     pump();
-  }, { root: scroller, rootMargin: '200% 0px 200% 0px' });
+  }, { root: scroller, rootMargin: perf.lite ? '110% 0px 110% 0px' : '200% 0px 200% 0px' });
   // which page is in the middle of the screen
   const posObs = new IntersectionObserver((entries) => {
     for (const e of entries) if (e.isIntersecting) M.roll($$('#posN'), e.target.dataset.n);

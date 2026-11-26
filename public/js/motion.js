@@ -57,6 +57,12 @@ export const bump = (el, k = 1.18) => play(el, [{ transform: 'scale(1)' }, { tra
 export const nudgeDown = (el) => play(el, [{ transform: 'translateY(0)' }, { transform: 'translateY(4px)', offset: 0.4 }, { transform: 'translateY(0)' }], { duration: 420, easing: 'cubic-bezier(.3,.7,.3,1)' });
 
 // A number that rolls to its new value like a counter (old one slides out, new one slides in).
+// several things rise into place one after another (each starts a little lower and see-through)
+export function rise(els, { delay = 0, step = 45, y = 12 } = {}) {
+  [...(els || [])].forEach((el, i) => play(el, [{ opacity: 0, transform: `translateY(${y}px)` }, { opacity: 1, transform: 'none' }],
+    { duration: SPRING.gentle.duration, easing: SPRING.gentle.easing, delay: delay + i * step, fill: 'backwards' }));
+}
+
 export function roll(el, text) {
   if (!el) return;
   const old = el.textContent;
