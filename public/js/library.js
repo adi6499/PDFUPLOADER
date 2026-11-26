@@ -6,7 +6,7 @@ import { qrSvg, qrSvgFile, qrPng, saveBlob } from './qr.js';
 import { inspectPdf, fmtSize } from './pdfkit.js';
 import * as M from './motion.js';
 import { blankCover } from './site.js';
-import { collapseFrom, assemble, enableHoverScatter, enableButtonParticles, swallow } from './particles.js';
+import { collapseFrom, assemble, enableHoverScatter, enableButtonParticles, swallow, formPage, morphQR, pourInto, stream } from './particles.js';
 import { takeFiles } from './handoff.js';
 import { cardSheet } from './card.js';
 import { copyText, showCopied, flashLink } from './copy.js';
@@ -70,6 +70,7 @@ async function start() {
   if (location.hash === '#upload') {
     history.replaceState(null, '', location.pathname);
     const files = await takeFiles();
+    S.uploadFrom = rectOf($('#uploadBtn'));
     if (files.length) startUpload(files);
     else { toast('Choose the PDF with Upload PDF'); ui(() => M.bump($('#uploadBtn'), 1.08)); }
   }
@@ -311,7 +312,12 @@ function closeSheet(force, { quiet = false, at = null } = {}) {
 const closeBtn = () => `<button class="ju-icon close-x" type="button" data-sheet="close" aria-label="Close">${icon('x')}</button>`;
 
 // ---------- upload: new document ----------
-function pickFiles() { $('#fileInput').value = ''; $('#fileInput').click(); }
+function pickFiles(from) { S.uploadFrom = rectOf(from); $('#fileInput').value = ''; $('#fileInput').click(); }
+function rectOf(el) { try { const r = el && el.getBoundingClientRect(); return r && r.width ? { left: r.left, top: r.top, width: r.width, height: r.height } : null; } catch { return null; } }
+// the window opens with grains pouring into it from where the upload started
+function pourFromStart(sh) { const f = S.uploadFrom; S.uploadFrom = null; if (f) ui(() => pourInto(f, sh)); }
+// the progress bar's moving end (where the stream of grains goes)
+const barEnd = (sh) => () => { const i = $('#pBar', sh); if (!i) return null; const r = i.getBoundingClientRect(); return { x: r.right, y: r.top + r.height / 2 }; };
 
 async function startUpload(files) {
   if (S.offline || !S.publicUrl) { toast('Not connected: open the page from the Jinharsh Docs program first.'); return; }
@@ -359,13 +365,18 @@ function uploadOne(file, idx, count) {
           <button class="ju-btn accent" type="button" id="goBtn" ${tooBig ? 'disabled' : ''}>${icon('qr-code')}Create QR code</button>
         </div>
       </div>`, { wide: true });
+    if (idx === 0) pourFromStart(sh);
 
     const fTitle = $('#fTitle', sh), fCode = $('#fCode', sh), msg = $('#fCodeMsg', sh);
     let titleTouched = false, codeOk = true, chosen = '';
     fTitle.value = file.name.replace(/\.pdf$/i, '');
     fTitle.addEventListener('input', () => { titleTouched = true; });
 
-    const paintQR = () => { $('#qrPrev', sh).innerHTML = QR(S.publicUrl + '/c/' + (chosen || suggested)); };
+    const paintQR = () => {
+      const tile = $('#qrPrev', sh), link = S.publicUrl + '/c/' + (chosen || suggested), was = tile.dataset.shows;
+      const put = () => { tile.innerHTML = QR(link); tile.dataset.shows = link; };
+      if (was && was !== link) morphQR(tile, was, link, put); else put();
+    };
     paintQR();
     let t = 0, seq = 0;
     fCode.addEventListener('input', () => {
@@ -397,7 +408,7 @@ function uploadOne(file, idx, count) {
         r.canvas.setAttribute('aria-label', 'First page');
         box.appendChild(r.canvas);
         box.insertAdjacentHTML('beforeend', `<span class="pages">${plural(r.pages, 'page', 'pages')}</span>`);
-        M.play(r.canvas, [{ transform: 'scale(1.06)' }, { transform: 'none' }], { duration: M.SPRING.smooth.duration, easing: M.SPRING.smooth.easing });
+        formPage(box, r.canvas, { cols: 36 }); // the first page forms out of its own grains
       }
       if (!titleTouched) fTitle.value = r.title;
     }).catch(() => {
@@ -420,6 +431,7 @@ function uploadOne(file, idx, count) {
       M.resize(sh, () => {
         stage.innerHTML = `<div class="progress"><div class="ju-bar"><i id="pBar" style="width:0%"></i></div><div class="row"><span id="pWhat">Reading the PDF…</span><span id="pNum"></span></div></div>`;
       });
+      const flow = stream($('#coverBox', sh), barEnd(sh));
       try {
         await inspecting;
         $('#pWhat', sh).textContent = 'Uploading…';
@@ -427,6 +439,7 @@ function uploadOne(file, idx, count) {
           $('#pBar', sh).style.width = Math.round(p * 96) + '%';
           $('#pNum', sh).textContent = `${fmtSize(a)} of ${fmtSize(b)}`;
         });
+        flow();
         $('#pWhat', sh).textContent = 'Saving the cover…';
         let final = doc;
         if (info?.cover) { try { final = await API.putCover(doc.code, 1, info.cover, info.coverW, info.coverH); } catch {} }
@@ -435,6 +448,7 @@ function uploadOne(file, idx, count) {
         render();
         showDone(sh, final, idx, count, resolveAll, swirl);
       } catch (err) {
+        flow();
         swirl.cancel();
         S.sheetLocked = false;
         fTitle.disabled = fCode.disabled = false;
@@ -518,12 +532,13 @@ async function startReplace(file) {
     <div class="notice" style="background:var(--ok-soft);color:var(--ok);margin:14px 0 0">${icon('lock')}<div><b>The QR code and link stay exactly the same.</b><p>Everyone who scans it will see the new file. The current one is kept under Versions, so you can switch back.</p></div></div>
     <div id="stage"><div class="sheet-foot"><button class="ju-btn ghost" type="button" data-sheet="close">Cancel</button><button class="ju-btn accent" type="button" id="goBtn">${icon(first ? 'upload' : 'refresh-cw')}${first ? 'Upload PDF' : 'Replace PDF'}</button></div></div>`, { wide: true });
   ui(() => { $('.swap .arrow', sh).style.transform = 'scaleX(-1)'; });
+  pourFromStart(sh);
   let info = null;
   const inspecting = inspectPdf(file).then((r) => {
     info = r; const box = $('#newCover', sh);
     if (box) {
       box.innerHTML = ''; box.appendChild(r.canvas); box.insertAdjacentHTML('beforeend', `<span class="pages">${plural(r.pages, 'page', 'pages')}</span>`);
-      M.play(box, [{ transform: 'translateX(-14px) rotate(-1.5deg)' }, { transform: 'none' }], { duration: M.SPRING.gentle.duration, easing: M.SPRING.gentle.easing });
+      formPage(box, r.canvas, { cols: 32 });
     }
   }).catch(() => {});
   $('#goBtn', sh).addEventListener('click', async () => {
@@ -532,12 +547,14 @@ async function startReplace(file) {
     M.resize(sh, () => {
       stage.innerHTML = `<div class="progress"><div class="ju-bar"><i id="pBar" style="width:0%"></i></div><div class="row"><span id="pWhat">Uploading…</span><span id="pNum"></span></div></div>`;
     });
+    const flow = stream($('#newCover', sh), barEnd(sh));
     try {
       await inspecting;
       let doc = await API.addVersion(d.code, file, { pages: info?.pages, nextV: d.versions.length ? Math.max(...d.versions.map((x) => x.v)) + 1 : 1 }, (p, a, b) => {
         $('#pBar', sh).style.width = Math.round(p * 96) + '%';
         $('#pNum', sh).textContent = `${fmtSize(a)} of ${fmtSize(b)}`;
       });
+      flow();
       if (info?.cover) { try { doc = await API.putCover(doc.code, doc.current, info.cover, info.coverW, info.coverH); } catch {} }
       // the new cover slides over the old one, then everything settles
       const nb = $('#newCover', sh), ob = $('#oldCover', sh);
@@ -547,6 +564,7 @@ async function startReplace(file) {
       ui(() => M.bump(rowEl(doc.code)?.querySelector('.thumb'), 1.12));
       toast(first ? 'Uploaded. The QR now opens this PDF.' : 'Replaced. Same QR, new PDF.');
     } catch (err) {
+      flow();
       S.sheetLocked = false;
       M.resize(sh, () => {
         stage.innerHTML = `<p class="field"><small class="bad">${esc(err.message)}</small></p><div class="sheet-foot"><button class="ju-btn ghost" type="button" data-sheet="close">Close</button></div>`;
@@ -656,7 +674,7 @@ function paintThemeBtn() {
 
 // ---------- wiring ----------
 function wire() {
-  $('#uploadBtn').addEventListener('click', pickFiles);
+  $('#uploadBtn').addEventListener('click', (e) => pickFiles(e.currentTarget));
   $('#fileInput').addEventListener('change', (e) => { const f = [...e.target.files]; e.target.value = ''; startUpload(f); });
   $('#replaceInput').addEventListener('change', (e) => { const f = e.target.files[0]; e.target.value = ''; startReplace(f); });
   $('#settingsBtn').addEventListener('click', settingsSheet);
@@ -684,7 +702,7 @@ function wire() {
     down = null;
     const el = e.target.closest('[data-act]'); if (!el) return;
     const act = el.dataset.act;
-    if (act === 'upload') return pickFiles();
+    if (act === 'upload') return pickFiles(el);
     if (act === 'show-live') { S.filter = 'live'; S.query = ''; $('#search').value = ''; renderTiles(); renderList(); return; }
     const code = el.closest('.doc')?.dataset.code; const d = docOf(code); if (!d) return;
     if (act === 'toggle') return toggle(code);
@@ -692,7 +710,7 @@ function wire() {
     if (act === 'svg' || act === 'png') { ui(() => M.nudgeDown(el.querySelector('.i'))); return downloadQR(d, act); }
     if (act === 'print') return printQR(d);
     if (act === 'card') return cardSheet({ link: d.link, title: d.title, site: S.site, printable: S.printable, from: el });
-    if (act === 'replace') { S.replaceFor = code; $('#replaceInput').click(); return; }
+    if (act === 'replace') { S.replaceFor = code; S.uploadFrom = rectOf(el); $('#replaceInput').click(); return; }
     if (act === 'details') return detailsSheet(d);
     if (act === 'use-version') {
       const v = Number(el.dataset.v);
@@ -742,6 +760,7 @@ function wire() {
     if (!hasFiles(e)) return;
     e.preventDefault(); depth = 0; $('#dropVeil').hidden = true;
     if (!$('#overlay').hidden) { toast('Finish the open window first.'); return; }
+    S.uploadFrom = { left: e.clientX - 24, top: e.clientY - 24, width: 48, height: 48 };
     startUpload(e.dataTransfer.files);
   });
 }

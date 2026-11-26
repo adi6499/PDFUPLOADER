@@ -54,7 +54,7 @@
 .c-item:hover { background: var(--hover); }
 .c-item:active { transform: scale(.97); }
 .c-ic { width: 42px; height: 42px; border-radius: 50%; display: grid; place-items: center; background: var(--card); box-shadow: var(--shadow); flex: none; }
-.c-item span:last-child { min-width: 0; display: flex; flex-direction: column; }
+.c-item > span:not(.c-ic):not(.c-go) { min-width: 0; display: flex; flex-direction: column; }
 .c-item b { font-weight: 650; }
 .c-item small { color: var(--muted); font-size: 12.5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .addr { margin: 16px 2px 0; color: var(--muted); font-size: 13px; }
@@ -170,3 +170,30 @@
 /* slower phones: the reader backdrop is solid instead of blurred */
 html.lite .reader-ov { background: rgba(12, 12, 14, .97); }
 html.lite:not(.dark) .reader-ov { background: rgba(238, 238, 242, .98); }
+
+/* contact buttons: on hover the button lifts, its round icon turns orange, the icon moves in its own way
+   (the phone rings, the chat bubble pops, the letter flies off and comes back, the globe turns) and a chevron
+   slides in; a few grains spray off the icon (particles.js sparkle) */
+.c-item { position: relative; transition: transform .4s var(--sp-smooth, var(--ease)), background-color .18s, box-shadow .3s; }
+.c-ic { transition: background-color .22s, color .22s, transform .45s var(--sp-bouncy, var(--ease)); }
+.c-go { margin-left: auto; flex: none; display: grid; place-items: center; color: var(--muted); opacity: 0; transform: translateX(-8px) rotate(-90deg);
+  transition: opacity .2s, transform .35s var(--sp-smooth, var(--ease)); }
+.c-go .i { width: 16px; height: 16px; }
+.addr { margin-top: 18px; }
+@media (hover: hover) {
+  .c-item:hover { transform: translateY(-3px); box-shadow: 0 16px 32px -18px rgba(20, 22, 28, .4); }
+  .dark .c-item:hover { box-shadow: 0 16px 32px -16px rgba(0, 0, 0, .9); }
+  .c-item:hover .c-ic { background: var(--accent); color: #fff; transform: scale(1.08); }
+  .dark .c-item:hover .c-ic { color: #141416; } /* the lighter orange of dark mode takes a dark icon, like the kit's buttons */
+  .c-item:hover .c-go { opacity: 1; transform: translateX(0) rotate(-90deg); }
+}
+@media (hover: hover) and (prefers-reduced-motion: no-preference) {
+  .c-item[data-k="call"]:hover .c-ic .i { animation: c-ring .75s ease-in-out; }
+  .c-item[data-k="wa"]:hover .c-ic .i { animation: c-pop .6s cubic-bezier(.3, 1.6, .5, 1); }
+  .c-item[data-k="mail"]:hover .c-ic .i { animation: c-send .7s cubic-bezier(.5, 0, .3, 1); }
+  .c-item[data-k="web"]:hover .c-ic .i { animation: c-spin .9s cubic-bezier(.4, 0, .2, 1); }
+}
+@keyframes c-ring { 0%, 100% { transform: rotate(0); } 12% { transform: rotate(-16deg); } 26% { transform: rotate(14deg); } 40% { transform: rotate(-11deg); } 54% { transform: rotate(8deg); } 68% { transform: rotate(-4deg); } 82% { transform: rotate(2deg); } }
+@keyframes c-pop { 0% { transform: scale(1); } 35% { transform: scale(1.28) rotate(-8deg); } 65% { transform: scale(.92) rotate(3deg); } 100% { transform: scale(1); } }
+@keyframes c-send { 0% { transform: none; opacity: 1; } 45% { transform: translate(14px, -10px) scale(.7); opacity: 0; } 46% { transform: translate(-14px, 8px) scale(.7); opacity: 0; } 100% { transform: none; opacity: 1; } }
+@keyframes c-spin { from { transform: rotate(0); } to { transform: rotate(360deg); } }

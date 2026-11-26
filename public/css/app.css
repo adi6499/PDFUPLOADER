@@ -340,3 +340,8 @@ html.lite .ju-glass, html.lite .ju-overlay, html.lite .ju-toast, html.lite .drop
 html.lite.ju .ju-glass, html.lite.ju .ju-sheet, html.lite.ju .ju-pane { background: var(--card); }
 html.lite.ju .ju-overlay { background: rgba(20, 22, 28, .5); }
 html.lite.ju.dark .ju-overlay { background: rgba(0, 0, 0, .62); }
+
+/* a cover forming out of grains: no white sheet behind them yet */
+.cover-box.forming { background: transparent; box-shadow: none; }
+.cover-box.forming .pages { opacity: 0; }
+.cover-box .pages { transition: opacity .3s; }

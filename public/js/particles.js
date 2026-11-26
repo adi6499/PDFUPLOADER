@@ -506,6 +506,158 @@ export function formPage(pageEl, canvas, { cols = 44, maxAtOnce = 3 } = {}) {
   });
 }
 
+// ---------- the upload window ----------
+const inkNow = () => (document.documentElement.classList.contains('dark') ? 'rgb(236,236,240)' : 'rgb(17,17,19)');
+
+// Grains pour out of `fromRect` (the button that was pressed, or where a file was dropped) into a window that is
+// opening, and melt into it.
+export function pourInto(fromRect, toEl, { n = 70 } = {}) {
+  if (calm() || !fromRect || !toEl || !fromRect.width) return;
+  n = many(n);
+  const ink = inkNow(), t0 = performance.now();
+  const ps = Array.from({ length: n }, () => ({
+    sx: fromRect.left + Math.random() * fromRect.width, sy: fromRect.top + Math.random() * fromRect.height,
+    u: 0.08 + Math.random() * 0.84, v: 0.05 + Math.random() * 0.55,          // where in the window it lands
+    bend: (Math.random() - 0.5) * 160, delay: Math.random() * 220, dur: 520 + Math.random() * 260,
+    s: 1.3 + Math.random() * 1.7, col: Math.random() < 0.7 ? 'rgb(234,88,12)' : ink }));
+  fxAdd({
+    draw(g, dpr, now) {
+      const b = toEl.getBoundingClientRect();
+      if (!b.width) return false;
+      const el = now - t0;
+      let alive = false;
+      for (const p of ps) {
+        const t = clamp01((el - p.delay) / p.dur);
+        if (t >= 1) continue;
+        alive = true;
+        if (t <= 0) continue;
+        const e = easeInOut(t), arc = Math.sin(Math.PI * t);
+        const x = lerp(p.sx, b.left + p.u * b.width, e) + arc * p.bend, y = lerp(p.sy, b.top + p.v * b.height, e) - arc * 40;
+        dot(g, dpr, x, y, p.s * (1 - 0.5 * t), p.col, t > 0.75 ? (1 - t) / 0.25 : Math.min(1, t * 5));
+      }
+      return alive;
+    },
+  });
+}
+
+// The QR in `tile` rearranges its own grains into a new code. `paint()` puts the new code in; the grains of the
+// old code then slide over to the squares of the new one, orange while they move. Used while a link is typed.
+export function morphQR(tile, fromLink, toLink, paint) {
+  let a = null;
+  try { if (!calm() && fromLink) a = cellsOf(tile, fromLink); } catch { a = null; }
+  if (tile.__morph) tile.__morph.stop();
+  paint();
+  if (!a || !a.cells.length) return;
+  let b = null;
+  try { b = cellsOf(tile, toLink); } catch { b = null; }
+  if (!b || !b.cells.length) return;
+  const r0 = b.svg.getBoundingClientRect();
+  const path = b.svg.querySelector('path');
+  if (path) path.style.visibility = 'hidden';
+  const nA = a.cells.length, nB = b.cells.length, s = b.ks + 0.3;
+  const parts = b.cells.map((c, i) => {
+    const o = a.cells[Math.min(nA - 1, Math.floor((i * nA) / nB))];
+    const d = Math.hypot(c.x - b.cx, c.y - b.cy) / (b.size / 2);
+    return { sx: o.x, sy: o.y, tx: c.x, ty: c.y, delay: d * 120 + Math.random() * 60 };
+  });
+  let stopped = false;
+  const m = { stop: () => { if (stopped) return; stopped = true; clearTimeout(hard); if (path) path.style.visibility = ''; if (tile.__morph === m) tile.__morph = null; } };
+  tile.__morph = m;
+  const hard = setTimeout(m.stop, 1500); // the real code always comes back
+  const t0 = performance.now(), DUR = 380;
+  fxAdd({
+    draw(g, dpr, now) {
+      if (stopped || !tile.isConnected) { m.stop(); return false; }
+      const r = b.svg.getBoundingClientRect(), ox = r.left - r0.left, oy = r.top - r0.top; // follow the window
+      const el = now - t0;
+      let busy = false;
+      for (const p of parts) {
+        const t = clamp01((el - p.delay) / DUR);
+        if (t < 1) busy = true;
+        const e = easeInOut(t);
+        g.fillStyle = colour(1 - Math.sin(Math.PI * t) * 0.75);
+        grain(g, dpr, lerp(p.sx, p.tx, e) + ox, lerp(p.sy, p.ty, e) + oy, s);
+      }
+      if (!busy) { m.stop(); return false; }
+      return true;
+    },
+    end: () => m.stop(),
+  });
+}
+
+// While a file uploads, a thin stream of grains flows from its cover into the moving end of the progress bar.
+// Returns stop(); it also ends by itself when the cover leaves the page, and after 10 minutes at most.
+// (Its own layer: an upload can take longer than the shared layer is allowed to live.)
+export function stream(fromEl, toPoint, { rate = 34 } = {}) {
+  if (calm() || !fromEl) return () => {};
+  if (perf.lite) rate *= 0.45;
+  const L = makeCanvas();
+  L.cv.style.zIndex = '96';
+  const ink = inkNow(), ps = [];
+  let stopped = false, ended = false, last = performance.now(), acc = 0, raf = 0;
+  const end = () => { if (ended) return; ended = true; cancelAnimationFrame(raf); clearTimeout(cap); L.cv.remove(); };
+  const cap = setTimeout(end, 600000);
+  const frame = (now) => {
+    raf = 0;
+    if (ended) return;
+    frameCheck(now);
+    if (!fromEl.isConnected) { end(); return; }
+    const dt = Math.min(64, now - last); last = now;
+    const a = fromEl.getBoundingClientRect();
+    let to = null;
+    try { to = toPoint(); } catch {}
+    if (!stopped && to && a.width) {
+      acc += (dt * rate) / 1000;
+      while (acc >= 1) {
+        acc--;
+        ps.push({ sx: a.left + a.width * (0.15 + Math.random() * 0.7), sy: a.top + a.height * (0.2 + Math.random() * 0.6), t0: now,
+          dur: 520 + Math.random() * 300, bend: (Math.random() - 0.5) * 50, s: 1.2 + Math.random() * 1.6, col: Math.random() < 0.65 ? 'rgb(234,88,12)' : ink });
+      }
+    }
+    L.g.clearRect(0, 0, L.cv.width, L.cv.height);
+    for (let i = ps.length - 1; i >= 0; i--) {
+      const p = ps[i], t = (now - p.t0) / p.dur;
+      if (t >= 1 || !to) { ps.splice(i, 1); continue; }
+      const e = t * t; // faster and faster towards the bar
+      dot(L.g, L.dpr, lerp(p.sx, to.x, e) + Math.sin(Math.PI * t) * p.bend, lerp(p.sy, to.y, e), p.s * (1 - 0.4 * t), p.col,
+        Math.min(1, t * 6) * (t > 0.85 ? (1 - t) / 0.15 : 1));
+    }
+    if (stopped && !ps.length) { end(); return; }
+    raf = requestAnimationFrame(frame);
+  };
+  raf = requestAnimationFrame(frame);
+  return () => { if (stopped) return; stopped = true; setTimeout(end, 1500); };
+}
+
+// A small spray of grains off the edge of a round icon (the contact buttons, when the mouse comes over them).
+export function sparkle(el, { n = 18 } = {}) {
+  if (calm() || !el) return;
+  const r = el.getBoundingClientRect();
+  if (!r.width) return;
+  n = many(n);
+  const cx = r.left + r.width / 2, cy = r.top + r.height / 2, rad = r.width / 2, ink = inkNow(), t0 = performance.now();
+  const ps = Array.from({ length: n }, () => {
+    const a = Math.random() * Math.PI * 2;
+    return { a, d0: rad * 0.9, d1: rad + 8 + Math.random() * 22, delay: Math.random() * 90, dur: 420 + Math.random() * 260,
+      s: 1.2 + Math.random() * 1.5, col: Math.random() < 0.72 ? 'rgb(234,88,12)' : ink };
+  });
+  fxAdd({
+    draw(g, dpr, now) {
+      const el2 = now - t0;
+      let alive = false;
+      for (const p of ps) {
+        const t = clamp01((el2 - p.delay) / p.dur);
+        if (t >= 1) continue;
+        alive = true;
+        if (t <= 0) continue;
+        const d = lerp(p.d0, p.d1, 1 - Math.pow(1 - t, 3));
+        dot(g, dpr, cx + Math.cos(p.a) * d, cy + Math.sin(p.a) * d + t * t * 6, p.s * (1 - 0.4 * t), p.col, 1 - t);
+      }
+      return alive;
+    },
+  });
+}
+
 // ---------- small effects on one shared layer: a burst, a pour, a dissolve ----------
 let fx = null;
 function fxAdd(item) {

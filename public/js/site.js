@@ -2,7 +2,7 @@
 import { icon } from '/vendor/icons.js';
 import { qrSvg, qrSvgFile, qrPng, saveBlob } from './qr.js';
 import * as M from './motion.js';
-import { assemble, enableHoverScatter, enableButtonParticles, swallow } from './particles.js';
+import { assemble, enableHoverScatter, enableButtonParticles, swallow, sparkle } from './particles.js';
 import { cardSheet } from './card.js';
 import { copyText, showCopied, flashLink } from './copy.js';
 
@@ -50,14 +50,29 @@ export function blankCover(doc, extraClass = '') {
   return `<div class="blank-cover ${extraClass}" style="--h:${brandHue(b)}"><span class="bc-brand">${esc(b)}</span><span class="bc-title">${esc(doc.title)}</span></div>`;
 }
 
+const GO = `<span class="c-go" aria-hidden="true">${icon('chevron-down')}</span>`;
+// the mouse coming over a contact button sprays a few grains off its round icon (not more than once a moment)
+function wireContactHover() {
+  document.addEventListener('pointerover', (e) => {
+    if (e.pointerType !== 'mouse') return;
+    const it = e.target.closest && e.target.closest('.c-item');
+    if (!it || (e.relatedTarget && it.contains(e.relatedTarget))) return;
+    const now = Date.now();
+    if (now - (it.__sp || 0) < 700) return;
+    it.__sp = now;
+    try { sparkle(it.querySelector('.c-ic')); } catch {}
+  }, { passive: true });
+}
+try { wireContactHover(); } catch { /* cosmetic */ }
+
 export function contactHtml(SITE, title) {
   const C = SITE.contact || {};
   const items = [];
   const subj = title ? `About: ${title}` : 'Enquiry';
-  (C.phones || []).slice(0, 1).forEach((p) => items.push(`<a class="c-item" href="tel:${esc(p.dial)}"><span class="c-ic">${icon('phone')}</span><span><b>Call</b><small>${esc(p.display)}</small></span></a>`));
-  if (C.whatsapp) items.push(`<a class="c-item" href="https://wa.me/${esc(C.whatsapp)}?text=${encodeURIComponent('Hello Jinharsh, ' + (title ? 'I have a question about “' + title + '”.' : 'I have a question.'))}" target="_blank" rel="noopener"><span class="c-ic">${icon('message-circle')}</span><span><b>WhatsApp</b><small>Chat with us</small></span></a>`);
-  if (C.email) items.push(`<a class="c-item" href="mailto:${esc(C.email)}?subject=${encodeURIComponent(subj)}"><span class="c-ic">${icon('mail')}</span><span><b>Email</b><small>${esc(C.email)}</small></span></a>`);
-  if (C.website) items.push(`<a class="c-item" href="${esc(C.website)}" target="_blank" rel="noopener"><span class="c-ic">${icon('globe')}</span><span><b>Website</b><small>${esc(C.website.replace(/^https?:\/\//, ''))}</small></span></a>`);
+  (C.phones || []).slice(0, 1).forEach((p) => items.push(`<a class="c-item" data-k="call" href="tel:${esc(p.dial)}"><span class="c-ic">${icon('phone')}</span><span><b>Call</b><small>${esc(p.display)}</small></span>${GO}</a>`));
+  if (C.whatsapp) items.push(`<a class="c-item" data-k="wa" href="https://wa.me/${esc(C.whatsapp)}?text=${encodeURIComponent('Hello Jinharsh, ' + (title ? 'I have a question about “' + title + '”.' : 'I have a question.'))}" target="_blank" rel="noopener"><span class="c-ic">${icon('message-circle')}</span><span><b>WhatsApp</b><small>Chat with us</small></span>${GO}</a>`);
+  if (C.email) items.push(`<a class="c-item" data-k="mail" href="mailto:${esc(C.email)}?subject=${encodeURIComponent(subj)}"><span class="c-ic">${icon('mail')}</span><span><b>Email</b><small>${esc(C.email)}</small></span>${GO}</a>`);
+  if (C.website) items.push(`<a class="c-item" data-k="web" href="${esc(C.website)}" target="_blank" rel="noopener"><span class="c-ic">${icon('globe')}</span><span><b>Website</b><small>${esc(C.website.replace(/^https?:\/\//, ''))}</small></span>${GO}</a>`);
   const phones = (C.phones || []).map((p) => `<a href="tel:${esc(p.dial)}">${esc(p.display)}</a>`).join(' · ');
   return `<section class="ju-card contact">
     <h2>Questions? Talk to us.</h2>
