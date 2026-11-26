@@ -6,7 +6,7 @@ import { qrSvg, qrSvgFile, qrPng, saveBlob } from './qr.js';
 import { inspectPdf, fmtSize, makeThumb } from './pdfkit.js';
 import * as M from './motion.js';
 import { blankCover } from './site.js';
-import { collapseFrom, assemble, enableHoverScatter, enableButtonParticles, swallow, formPage, morphQR, pourInto, stream } from './particles.js';
+import { collapseFrom, assemble, enableHoverScatter, swallow, formPage, morphQR, pourInto, stream } from './particles.js';
 import { takeFiles } from './handoff.js';
 import { cardSheet } from './card.js';
 import { openInsights } from './insights.js';
@@ -49,7 +49,6 @@ const rollNum = (n) => `<span class="rollbox"><span class="n">${n}</span></span>
 // ---------- start ----------
 async function start() {
   enableHoverScatter();    // big QR codes: the grains scatter away from the mouse or finger
-  enableButtonParticles(); // every button press sprays a few grains; download buttons pour them in
   ui(() => {
     $('#searchIcon').outerHTML = icon('search');
     $('#dropIcon').outerHTML = icon('upload', 'bob');

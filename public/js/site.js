@@ -2,7 +2,7 @@
 import { icon } from '/vendor/icons.js?v=3';
 import { qrSvg, qrSvgFile, qrPng, saveBlob } from './qr.js';
 import * as M from './motion.js';
-import { assemble, enableHoverScatter, enableButtonParticles, swallow, sparkle } from './particles.js';
+import { assemble, enableHoverScatter, swallow, sparkle } from './particles.js';
 // the visiting card code is only needed when someone opens a card: fetched quietly once the page is idle
 const loadCard = () => import('./card.js');
 export const idle = (fn, wait = 1500) => { try { setTimeout(() => (window.requestIdleCallback || ((f) => setTimeout(f, 1)))(() => { try { fn(); } catch {} }, { timeout: 4000 }), wait); } catch {} };
@@ -16,7 +16,6 @@ import { enableMagnifier } from './magnify.js';
 try { enableMagnifier('.ju-top'); } catch { /* cosmetic */ }
 
 enableHoverScatter();    // big QR codes: the grains scatter away from the mouse or finger
-enableButtonParticles(); // every button press sprays a few grains; download buttons pour them in
 
 // closing a window: it floats away as soft grains from where you pressed X, while the veil clears
 // light / dark: the sun or moon in the top bar; the new look spreads out in a circle from it.
