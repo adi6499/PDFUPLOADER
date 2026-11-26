@@ -108,7 +108,11 @@ try {
   ok(/immutable/.test(font.headers.get('cache-control') || ''), 'the font is kept by the browser for a year');
   const th = await fetch(`${BASE}/cover/catalogue/1-t.webp`);
   ok(th.status === 200 && (await th.text()) === 'RIFFyyyyWEBP', 'the small copy is served to lists and the front page');
-  ok((await (await fetch(`${BASE}/`)).text()).includes('/cover/catalogue/1-t.webp'), 'the front page shows the small copy, not the full cover');
+  const front = await (await fetch(`${BASE}/`)).text();
+  ok(front.includes('/cover/catalogue/1-t.webp'), 'the front page shows the small copy, not the full cover');
+  ok(/<section class="cards ju-enter" id="cards"[^>]*data-ready>\s*<article class="cat-card/.test(front) && front.includes('<article class="cat-card" data-key="catalogue">')
+    && /id="hubEyebrow">\d+ catalogues? · .*ready to read</.test(front) && /id="chips"[^>]*><button type="button" class="ju-chip on" data-brand="">All</.test(front),
+    'the front page comes with its cards inside, shown before any script runs');
 
   console.log('Replace the PDF');
   r = await j(await T(`/api/docs/catalogue/versions?name=cat-v2.pdf&pages=1`, { method: 'POST', headers: { 'Content-Type': 'application/pdf' }, body: tinyPdf('two') }));

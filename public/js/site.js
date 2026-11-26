@@ -12,6 +12,8 @@ idle(() => warmModule('/js/card.js'), 2500);
 import { copyText, showCopied, flashLink } from './copy.js';
 import { querySheet, setSite, track } from './visitor.js';
 import { enableMagnifier } from './magnify.js';
+import { esc, byName, brandHue, blankCover } from './markup.js';
+export { esc, byName, brandHue, blankCover };   // (made in markup.js, which the server uses too)
 // the top bar is a clear magnifying glass over the page (see magnify.js)
 try { enableMagnifier('.ju-top'); } catch { /* cosmetic */ }
 
@@ -46,22 +48,10 @@ try { wireTheme(); } catch { /* cosmetic */ }
 export const centreOf = (el) => { const b = el.getBoundingClientRect(); return { x: b.left + b.width / 2, y: b.top + b.height / 2 }; };
 const swallowOut = (sheet, ov, at) => { swallow(sheet, { at }); return M.play(ov, [{ opacity: 1 }, { opacity: 0 }], { duration: 480, easing: 'ease-in' }); };
 
-export const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 export const ui = (fn) => { try { fn(); } catch (e) {} };
-// A to Z, ignoring capitals (brand names): plain comparison, as the language-aware one loads big tables on first use
-export const byName = (a, b) => { const x = String(a).toLowerCase(), y = String(b).toLowerCase(); return x < y ? -1 : x > y ? 1 : 0; };
 export const toast = (t) => ui(() => JUI.toast(t));
 export const shortLink = (l) => String(l).replace(/^https?:\/\//, '').replace(/\/$/, '');
 
-// a calm colour per brand, for catalogues that have no cover picture yet
-export function brandHue(name) {
-  let h = 0; for (const ch of String(name || 'Jinharsh')) h = (h * 31 + ch.charCodeAt(0)) % 360;
-  return h;
-}
-export function blankCover(doc, extraClass = '') {
-  const b = doc.brand || 'Jinharsh';
-  return `<div class="blank-cover ${extraClass}" style="--h:${brandHue(b)}"><span class="bc-brand">${esc(b)}</span><span class="bc-title">${esc(doc.title)}</span></div>`;
-}
 
 const GO = `<span class="c-go" aria-hidden="true">${icon('chevron-down')}</span>`;
 // the mouse coming over a contact button sprays a few grains off its round icon (not more than once a moment)

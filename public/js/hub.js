@@ -1,9 +1,9 @@
 // The front page: every live catalogue, with brand filters and search.
 // Links from the old catalog.jinharsh.com hub keep working: /?cat=<name> opens that catalogue.
 import { icon } from '/vendor/icons.js?v=3';
-import { fmtSize } from './pdfkit.js';
 import * as M from './motion.js';
-import { esc, ui, contactHtml, shareSheet, qrSheet, blankCover, toast, byName } from './site.js';
+import { esc, ui, contactHtml, shareSheet, qrSheet, toast } from './site.js';
+import { cardHtml as card, sortCatalogs, brandsOf, hubEyebrow, chipsHtml } from './markup.js';
 import { saveFiles } from './handoff.js';
 import { track } from './visitor.js';
 
@@ -52,8 +52,10 @@ fetch('/api/info').then((r) => r.json()).then((inf) => {
 }).catch(() => {});
 $('#hubShare').addEventListener('click', (e) => shareSheet({ link: S.publicUrl + '/', title: 'Jinharsh Catalogues', from: e.currentTarget, site: S.site, printable: S.printable }));
 
-// waiting shapes while the list arrives (plain, nothing moves or shines)
-$('#cards').innerHTML = Array.from({ length: 6 }, () => '<div class="cat-card ghost-card"><div class="cc-cover"></div><div class="cc-body"><i></i><i></i></div></div>').join('');
+// the server puts the cards into the page itself, so they are on screen before this script has even arrived
+const SERVED = $('#cards').hasAttribute('data-ready');
+// otherwise: waiting shapes while the list arrives (plain, nothing moves or shines)
+if (!SERVED) $('#cards').innerHTML = Array.from({ length: 6 }, () => '<div class="cat-card ghost-card"><div class="cc-cover"></div><div class="cc-body"><i></i><i></i></div></div>').join('');
 
 async function load() {
   try {
@@ -68,13 +70,18 @@ async function load() {
     return;
   }
   // catalogues with a PDF first (newest first), then those still waiting
-  S.all.sort((a, b) => (a.waiting === b.waiting ? byName(b.updatedAt, a.updatedAt) : a.waiting ? 1 : -1));
-  const brands = [...new Set(S.all.map((d) => d.brand).filter(Boolean))].sort(byName);
-  const ready = S.all.filter((d) => !d.waiting).length;
-  $('#hubEyebrow').textContent = `${S.all.length} catalogue${S.all.length === 1 ? '' : 's'}${brands.length ? ` · ${brands.length} brand${brands.length === 1 ? '' : 's'}` : ''} · ${ready} ready to read`;
-  $('#chips').innerHTML = ['', ...brands].map((b) => `<button type="button" class="ju-chip${b === S.brand ? ' on' : ''}" data-brand="${esc(b)}">${b ? esc(b) : 'All'}</button>`).join('');
+  sortCatalogs(S.all);
+  const brands = brandsOf(S.all);
   $('#contact').innerHTML = contactHtml(S.site, '');
-  draw(true);
+  if (SERVED) {   // already on screen: nothing to draw, unless someone typed a search before this script arrived
+    $('#cards').removeAttribute('data-ready');
+    if ($('#q').value.trim()) { S.q = $('#q').value; draw(); }
+  }
+  else {
+    $('#hubEyebrow').textContent = hubEyebrow(S.all, brands);
+    $('#chips').innerHTML = chipsHtml(brands, S.brand);
+    draw(true);
+  }
   // catalog.jinharsh.com/?qr=1 opens QR Studio straight away (the address the team was given for it)
   if (new URLSearchParams(location.search).get('qr') === '1') studio();
 }
@@ -83,23 +90,6 @@ function visible() {
   const q = S.q.trim().toLowerCase();
   return S.all.filter((d) => (!S.brand || d.brand === S.brand) &&
     (!q || [d.title, d.brand, d.category, d.note].join(' ').toLowerCase().includes(q)));
-}
-
-function card(d, i = 99) {
-  const meta = d.waiting ? (d.sourceUrl ? 'On the maker’s website' : 'Coming soon')
-    : [d.pages ? `${d.pages} pages` : null, fmtSize(d.size)].filter(Boolean).join(' · ');
-  return `<article class="cat-card${d.waiting ? ' is-waiting' : ''}" data-key="${esc(d.code)}">
-    <a class="cc-link" href="/c/${esc(d.code)}" aria-label="${esc(d.title)}">
-      <div class="cc-cover">${d.cover ? `<img src="${esc(d.thumb || d.cover)}" alt="" width="${d.coverW || 720}" height="${d.coverH || 1018}" loading="${i < 4 ? 'eager' : 'lazy'}" decoding="async"${i < 2 ? ' fetchpriority="high"' : ''} style="view-transition-name:cover-${esc(d.code)}">` : blankCover(d)}</div>
-      <div class="cc-body">
-        <div class="cc-top">${d.brand ? `<span class="brand-pill">${esc(d.brand)}</span>` : ''}${d.category ? `<span class="cc-cat">${esc(d.category)}</span>` : ''}</div>
-        <h3>${esc(d.title)}</h3>
-        ${d.note ? `<p>${esc(d.note)}</p>` : ''}
-        <div class="cc-foot"><span class="${d.waiting ? 'ju-pill warn' : 'cc-meta'}">${esc(meta)}</span><span class="cc-go">${icon(d.waiting ? 'external-link' : 'book-open')}</span></div>
-      </div>
-    </a>
-    <button class="ju-icon cc-qr" type="button" data-qr="${esc(d.code)}" aria-label="QR code for ${esc(d.title)}" title="QR code">${icon('qr-code')}</button>
-  </article>`;
 }
 
 function draw(first) {

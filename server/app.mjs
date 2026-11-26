@@ -6,6 +6,7 @@ import { promises as fs, createReadStream, existsSync } from 'node:fs';
 import zlib from 'node:zlib';
 import { promisify } from 'node:util';
 import { join, resolve, extname, sep } from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { Store, receiveFile, readSmallBody, cleanFileName } from './store.mjs';
 import { BlobStore } from './blobstore.mjs';
 import { ROOT, readJson, loadConfig } from './config.mjs';
@@ -226,7 +227,23 @@ export async function createApp(overrides = {}) {
   }
 
   // ---------- the front page: / ----------
-  let hubTemplate = null;
+  let hubTemplate = null, markup = null, markupAt = 0;
+  // The cards, brand buttons and count line, made by the same code the page itself uses (public/js/markup.js), so
+  // they are on screen at the first paint instead of being built by the phone afterwards. If anything goes wrong
+  // the page is sent without them and draws them itself, as before.
+  async function hubParts(list) {
+    try {
+      const file = join(PUBLIC, 'js', 'markup.js');
+      const at = cfg.dev ? (await fs.stat(file)).mtimeMs : 0;   // (while developing, a changed file is read again)
+      if (!markup || at !== markupAt) { markup = await import(pathToFileURL(file).href + (at ? '?m=' + at : '')); markupAt = at; }
+      const sorted = markup.sortCatalogs(list.slice());
+      const brands = markup.brandsOf(sorted);
+      return { eyebrow: markup.esc(markup.hubEyebrow(sorted, brands)), chips: markup.chipsHtml(brands), cards: sorted.map(markup.cardHtml).join('') };
+    } catch (e) {
+      console.error('front page cards could not be made here (the page will draw them):', e && e.message);
+      return null;
+    }
+  }
   async function serveHub(req, res) {
     if (!hubTemplate || cfg.dev) hubTemplate = await fs.readFile(join(PUBLIC, 'index.html'), 'utf8');
     const list = store.list().filter((d) => d.status === 'live').map(publicDoc);
@@ -234,7 +251,16 @@ export async function createApp(overrides = {}) {
     const first = list.filter((d) => !d.waiting && d.cover).sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt))).slice(0, 2);
     const preload = first.map((d) => `<link rel="preload" as="image" href="${esc(d.thumb || d.cover)}">`).join('\n  ');
     const data = JSON.stringify({ catalogs: list, publicUrl: base(req), site: SITE, printable: PRINTABLE }).replace(/</g, '\\u003c');
-    const html = hubTemplate.replace('<!--PRELOAD-->', preload).replace('<!--DATA-->', `<script type="application/json" id="boot">${data}</script>`);
+    let html = hubTemplate.replace('<!--PRELOAD-->', () => preload).replace('<!--DATA-->', () => `<script type="application/json" id="boot">${data}</script>`);
+    const parts = list.length ? await hubParts(list) : null;
+    const EYEBROW = '<div class="ju-eyebrow" id="hubEyebrow">Jinharsh Industrial Solutions</div>';
+    const CHIPS = '<div class="chips" id="chips" role="group" aria-label="Brands"></div>';
+    const CARDS = '<section class="cards" id="cards" aria-live="polite"></section>';
+    if (parts && html.includes(EYEBROW) && html.includes(CHIPS) && html.includes(CARDS)) {
+      html = html.replace(EYEBROW, () => EYEBROW.replace('Jinharsh Industrial Solutions', parts.eyebrow))
+        .replace(CHIPS, () => CHIPS.replace('></div>', `>${parts.chips}</div>`))
+        .replace(CARDS, () => `<section class="cards ju-enter" id="cards" aria-live="polite" data-ready>${parts.cards}</section>`);
+    }
     sendPacked(req, res, 200, html, { 'Content-Type': 'text/html; charset=utf-8', 'Content-Security-Policy': CSP, 'Cache-Control': 'no-cache' });
   }
 
