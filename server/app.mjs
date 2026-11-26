@@ -221,7 +221,8 @@ export async function createApp(overrides = {}) {
     if (type.startsWith('text/html')) res.setHeader('Content-Security-Policy', CSP);
     // big files that never change (the PDF reader, the fonts) are kept by the browser for a week; everything else,
     // including the icon set that grows with new screens, is checked each time (a quick "not changed" answer)
-    return sendFile(req, res, full, type, { maxAge: /^\/vendor\/(pdfjs|fonts)\//.test(rel) ? 604800 : 0 });
+    if (/^\/vendor\/fonts\//.test(rel)) return sendFile(req, res, full, type, { immutable: true }); // a changed font gets a new file name
+    return sendFile(req, res, full, type, { maxAge: /^\/vendor\/pdfjs\//.test(rel) ? 604800 : 0 });
   }
 
   // ---------- the front page: / ----------
@@ -243,7 +244,7 @@ export async function createApp(overrides = {}) {
     if (!viewTemplate || cfg.dev) viewTemplate = await fs.readFile(join(PUBLIC, 'view.html'), 'utf8');
     const doc = store.get(code);
     const B = base(req);
-    let state, meta;
+    let state, meta, hero = '';
     // the other catalogues, for the "More catalogues" list under each one
     const others = store.list().filter((d) => d.status === 'live' && d.code !== code).map(publicDoc).filter((p) => !p.waiting)
       .slice(0, 24).map((p) => ({ code: p.code, title: p.title, brand: p.brand, cover: p.cover, thumb: p.thumb, coverW: p.coverW, coverH: p.coverH, pages: p.pages }));
@@ -268,12 +269,16 @@ export async function createApp(overrides = {}) {
         p.cover ? `<link rel="preload" as="image" href="${esc(p.cover)}" fetchpriority="high">` : '',
         TRIAL ? `<meta name="robots" content="noindex">` : '',
       ].join('\n  ');
+      // the cover comes in the page itself, so it is on screen before any script has run (view.js keeps this same picture)
+      if (p.cover && !p.waiting) hero = `<section class="v-hero"><div class="v-cover"><img src="${esc(p.cover)}" alt="Cover of ${esc(p.title)}" width="${p.coverW || 720}" height="${p.coverH || 1018}" fetchpriority="high" style="view-transition-name:cover-${esc(p.code)}"></div></section>`;
     } else {
       state = { status: doc ? 'archived' : store.isRetired(code) ? 'retired' : 'missing', doc: doc ? { title: doc.title, code: doc.code } : null, others, menu };
       meta = `<title>${esc(SITE.company?.short || 'Jinharsh')}</title>\n  <meta name="robots" content="noindex">`;
     }
     const data = JSON.stringify({ ...state, site: SITE, publicUrl: B, printable: PRINTABLE }).replace(/</g, '\\u003c');
-    const html = viewTemplate.replace('<!--META-->', meta).replace('<!--DATA-->', `<script type="application/json" id="boot">${data}</script>`);
+    // (functions, so a $ in a title is never read as a replacement pattern)
+    const html = viewTemplate.replace('<!--META-->', () => meta).replace('<!--HERO-->', () => hero)
+      .replace('<!--DATA-->', () => `<script type="application/json" id="boot">${data}</script>`);
     sendPacked(req, res, doc ? 200 : 404, html, { 'Content-Type': 'text/html; charset=utf-8', 'Content-Security-Policy': CSP, 'Cache-Control': 'no-cache' });
   }
 

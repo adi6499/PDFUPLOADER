@@ -11,28 +11,37 @@ const RIM = 10;          // px: the soft bend along the edges
 const RIM_PULL = 5;      // px: how far the rim pulls inward
 
 let svg = null, made = '', bars = [];
+const COLS = 96;          // columns in the map picture (stretched across the bar; exact, as it changes evenly across)
+const maps = new Map();
 
 // where each pixel of the bar looks instead ("show what is dx, dy away"), as a picture: red = across, green = down
 function mapOf(w, h) {
+  const key = w + 'x' + h;
+  if (maps.has(key)) return maps.get(key);
   const cx = w / 2, cy = h / 2, k = 1 - 1 / ZOOM;
+  const cols = Math.min(w, COLS), step = w / cols;
   const scale = 2 * Math.max(cx * k, cy * k + RIM_PULL) + 2;
   const c = document.createElement('canvas');
-  c.width = w; c.height = h;
+  c.width = cols; c.height = h;
   const g = c.getContext('2d');
-  const img = g.createImageData(w, h), d = img.data;
+  const img = g.createImageData(cols, h), d = img.data;
+  const R = [];
+  for (let x = 0; x < cols; x++) R.push(Math.round(128 + (((cx - (x + 0.5) * step) * k) / scale) * 255)); // the middle of each column
   for (let y = 0; y < h; y++) {
     let dy = (cy - (y + 0.5)) * k;                          // towards the middle line: bigger
     const edge = Math.min(y + 0.5, h - y - 0.5);
     if (edge < RIM) { const t = 1 - edge / RIM; dy += (y < cy ? 1 : -1) * RIM_PULL * t * t; } // the rim bends a little more
     const G = Math.round(128 + (dy / scale) * 255);
-    for (let x = 0; x < w; x++) {
-      const i = (y * w + x) * 4;
-      d[i] = Math.round(128 + (((cx - (x + 0.5)) * k) / scale) * 255);
+    for (let x = 0; x < cols; x++) {
+      const i = (y * cols + x) * 4;
+      d[i] = R[x];
       d[i + 1] = G; d[i + 2] = 128; d[i + 3] = 255;
     }
   }
   g.putImageData(img, 0, 0);
-  return { url: c.toDataURL('image/png'), scale: Math.round(scale * 100) / 100 };
+  const m = { url: c.toDataURL('image/png'), scale: Math.round(scale * 100) / 100 };
+  maps.set(key, m);
+  return m;
 }
 
 function apply() {

@@ -7,7 +7,6 @@ import { esc, ui, contactHtml, shareSheet, qrSheet, blankCover, idle, warmModule
 import { bindImage, swallow, formPage, perf } from './particles.js';
 import { track, needsDetails, beforeDownload } from './visitor.js';
 import { mediaHtml as renderMedia, wireMedia } from './media.js';
-import { openMenu } from './catmenu.js';
 
 const $ = (s, el = document) => el.querySelector(s);
 
@@ -29,7 +28,9 @@ ui(() => {
   const b = $('#menuTop');
   if (!(BOOT.menu || []).length) { b.hidden = true; return; }
   b.innerHTML = icon('menu');
-  b.addEventListener('click', () => openMenu({ list: BOOT.menu, current: D ? D.code : '', from: b }));
+  // the menu's code is fetched only when it is first needed (or quietly once the page has settled)
+  b.addEventListener('click', () => import('./catmenu.js').then((m) => m.openMenu({ list: BOOT.menu, current: D ? D.code : '', from: b })).catch(() => {}));
+  idle(() => warmModule('/js/catmenu.js'), 2000);
 });
 
 // the other catalogues, under every page (like the menu of the old catalogue hub)
@@ -103,6 +104,7 @@ function showDoc() {
     ? `<img src="${esc(D.cover)}" alt="Cover of ${esc(D.title)}" width="${D.coverW || 720}" height="${D.coverH || 1018}" fetchpriority="high" style="view-transition-name:cover-${esc(D.code)}">`
     : blankCover(D, 'big');
   const dl = D.download || D.file + '?dl=1';
+  const arrived = app.querySelector('.v-cover img'); // the cover the page came with (already on screen)
   app.innerHTML = `
     <section class="v-hero">
       <div class="v-cover">${cover}</div>
@@ -122,6 +124,10 @@ function showDoc() {
     ${mediaHtml()}
     ${othersHtml()}
     ${contactHtml(SITE, D.title, D.code)}`;
+
+  // keep that same picture rather than a new copy of it: no second decode, no flicker
+  const fresh = $('.v-cover img');
+  if (arrived && fresh && arrived.getAttribute('src') === fresh.getAttribute('src')) fresh.replaceWith(arrived);
 
   // "Read now" (or the cover) opens the reader over the page
   const read = () => openReader();

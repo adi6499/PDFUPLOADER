@@ -102,6 +102,10 @@ try {
   ok(r.status === 200 && r.body.live.cover && !r.body.live.thumb, 'a cover picture is saved (its small copy comes next)');
   r = await j(await T(`/api/docs/catalogue/versions/1/thumb?w=360&h=509`, { method: 'PUT', headers: { 'Content-Type': 'image/webp' }, body: Buffer.from('RIFFyyyyWEBP') }));
   ok(r.status === 200 && /\/cover\/catalogue\/1-t\.webp$/.test(r.body.live.thumb || ''), 'the small copy of the cover is saved');
+  html = await (await fetch(`${BASE}/c/catalogue`)).text();
+  ok(/<main id="app"[^>]*><section class="v-hero"><div class="v-cover"><img src="\/cover\/catalogue\/1\.webp"/.test(html), 'the cover comes inside the page itself, shown before any script runs');
+  const font = await fetch(`${BASE}/vendor/fonts/Geist-Latin.woff2`);
+  ok(/immutable/.test(font.headers.get('cache-control') || ''), 'the font is kept by the browser for a year');
   const th = await fetch(`${BASE}/cover/catalogue/1-t.webp`);
   ok(th.status === 200 && (await th.text()) === 'RIFFyyyyWEBP', 'the small copy is served to lists and the front page');
   ok((await (await fetch(`${BASE}/`)).text()).includes('/cover/catalogue/1-t.webp'), 'the front page shows the small copy, not the full cover');
