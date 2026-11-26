@@ -49,7 +49,7 @@ export function mediaHtml(media = [], code = '') {
   </section>`;
 }
 
-// a video plays in a window over the page; the window closes into a black hole like the others
+// a video plays in a window over the page; the window floats away as soft grains like the others
 function play(a) {
   const v = videoOf(a.href);
   if (!v) return false;

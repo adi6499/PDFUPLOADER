@@ -1,5 +1,5 @@
 // The menu of all catalogues on every catalogue's page (like the sidebar of the old catalogue hub): it slides in from
-// the left, with a search box and the brands; the catalogue you are on is marked. Closes into a black hole.
+// the left, with a search box and the brands; the catalogue you are on is marked. Closes gently, its grains floating away.
 import { icon } from '/vendor/icons.js?v=2';
 import * as M from './motion.js';
 import { swallow } from './particles.js';

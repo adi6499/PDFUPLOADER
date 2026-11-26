@@ -223,7 +223,7 @@ function openReader() {
     window.removeEventListener('popstate', onPop);
     document.removeEventListener('keydown', onKey);
     if (!fromBack) { try { history.back(); } catch {} }
-    // a black hole opens where X was pressed (or in the middle) and swallows the page you were reading,
+    // the page you were reading floats away as soft grains from where X was pressed (or the middle),
     // grains in its own colours, and the bar with it
     const mid = innerHeight / 2;
     const pageNow = [...ov.querySelectorAll('.page')].find((p) => { const b = p.getBoundingClientRect(); return b.top <= mid && b.bottom >= mid; }) || ov.querySelector('.page');

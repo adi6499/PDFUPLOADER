@@ -15,7 +15,7 @@ import { querySheet, setSite, track } from './visitor.js';
 enableHoverScatter();    // big QR codes: the grains scatter away from the mouse or finger
 enableButtonParticles(); // every button press sprays a few grains; download buttons pour them in
 
-// closing a window: a black hole opens where you pressed X and swallows it, while the veil clears
+// closing a window: it floats away as soft grains from where you pressed X, while the veil clears
 // light / dark: the sun or moon in the top bar; the new look spreads out in a circle from it.
 // Until it is pressed the page follows the phone's own setting; afterwards the choice is kept on this device.
 function wireTheme() {

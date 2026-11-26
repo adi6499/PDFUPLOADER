@@ -701,12 +701,13 @@ function colourOf(el) {
   } catch { return 'rgb(17,17,19)'; }
 }
 
-// `el` is swallowed by a black hole: it breaks into grains that spiral into a small dark hole at `at`
-// (the X that was pressed; the middle of `el` if not given), faster and faster, and the hole closes behind them.
-// `el` is hidden at once; the promise ends when the hole has closed. `sample` (a canvas or picture) gives the grains
-// their colours; otherwise they take the colour of the panel itself.
+// Closing, gently: `el` softens into small round grains in its own colours, which rise slowly, sway a little and
+// fade away, like dust in warm light. It starts where the X was pressed (`at`; the middle of `el` if not given) and
+// spreads outward like a ripple on water. `el` is hidden at once; the promise ends when the last grain has faded.
+// `sample` (a canvas or picture) gives the grains their colours; otherwise they take the colour of the panel itself.
+// (The name stays "swallow" because every window calls it; it used to be a black hole.)
 export function swallow(el, { sample = null, cols = 48, at = null } = {}) {
-  cols = fewerCols(cols);
+  cols = fewerCols(Math.min(cols, 44));
   return new Promise((resolve) => {
     try {
       if (calm() || !el) { resolve(); return; }
@@ -727,27 +728,27 @@ export function swallow(el, { sample = null, cols = 48, at = null } = {}) {
       try { ink = getComputedStyle(el).color || ink; } catch {}
       const cx = at && isFinite(at.x) ? at.x : r.left + r.width / 2;
       const cy = at && isFinite(at.y) ? at.y : r.top + r.height / 2;
-      const cw = r.width / cols, ch = r.height / rows, gs = Math.max(cw, ch);
+      const cw = r.width / cols, ch = r.height / rows;
       const rmax = Math.max(Math.hypot(r.left - cx, r.top - cy), Math.hypot(r.right - cx, r.top - cy), Math.hypot(r.left - cx, r.bottom - cy), Math.hypot(r.right - cx, r.bottom - cy)) || 1;
-      const dir = Math.random() < 0.5 ? 1 : -1; // the whole swirl turns one way
       const ps = [];
       for (let j = 0; j < rows; j++) for (let i = 0; i < cols; i++) {
         const k = (j * cols + i) * 4;
-        const col = px ? `rgb(${px[k]},${px[k + 1]},${px[k + 2]})` : (Math.random() < 0.04 ? ink : surface);
+        const col = px ? `rgb(${px[k]},${px[k + 1]},${px[k + 2]})` : (Math.random() < 0.05 ? ink : surface);
         const x0 = r.left + i * cw, y0 = r.top + j * ch;
-        const dx = x0 + cw / 2 - cx, dy = y0 + ch / 2 - cy, r0 = Math.hypot(dx, dy);
-        ps.push({ x0, y0, col, r0, th0: Math.atan2(dy, dx),
-          delay: (r0 / rmax) * 300 + Math.random() * 110,      // the nearest grains fall in first
-          dur: 520 + Math.random() * 260,
-          spin: dir * (2.4 + Math.random() * 1.6) });           // how far each one turns on its way in
+        const r0 = Math.hypot(x0 + cw / 2 - cx, y0 + ch / 2 - cy);
+        ps.push({ x0, y0, col,
+          delay: (r0 / rmax) * 280 + Math.random() * 140,   // the ripple: nearest first
+          dur: 950 + Math.random() * 550,                    // slow, and each at its own pace
+          rise: 26 + Math.random() * 64,                     // how far it floats up
+          drift: (Math.random() - 0.5) * 34,                 // and a little to one side
+          sway: 3 + Math.random() * 7, ph: Math.random() * Math.PI * 2,
+          dot: 1.2 + Math.random() * 1.6 });                 // the size it settles to
       }
       el.style.visibility = 'hidden';
-      const coreMax = Math.max(10, Math.min(26, Math.min(r.width, r.height) * 0.07));
-      const total = 300 + 110 + 780 + 140;
       const t0 = performance.now();
       let done = false;
       const finish = () => { if (!done) { done = true; resolve(); } };
-      setTimeout(finish, 1900);
+      setTimeout(finish, 2600); // always ends, even if the browser pauses drawing
       fxAdd({
         draw(g, dpr, now) {
           const el2 = now - t0;
@@ -756,23 +757,18 @@ export function swallow(el, { sample = null, cols = 48, at = null } = {}) {
             const t = clamp01((el2 - p.delay) / p.dur);
             if (t >= 1) continue;
             alive = true;
-            if (el2 < p.delay) { dot(g, dpr, p.x0, p.y0, gs + 0.6, p.col, 1); continue; } // still part of the panel
-            const e = t * t;                                     // speeds up as it falls in
-            const rr = p.r0 * (1 - e), th = p.th0 + p.spin * e * e;
-            const s = Math.max(0.8, gs * (1 - 0.85 * e));
-            dot(g, dpr, cx + Math.cos(th) * rr - s / 2, cy + Math.sin(th) * rr - s / 2, s, p.col, t > 0.9 ? (1 - t) / 0.1 : 1);
+            if (el2 < p.delay) { dot(g, dpr, p.x0, p.y0, Math.max(cw, ch) + 0.6, p.col, 1); continue; } // still part of the panel
+            const e = 1 - (1 - t) * (1 - t);                   // eases out: quick to lift, slow to settle
+            const soft = clamp01(t * 3.2);                      // the cell becomes a small round grain
+            const size = lerp(Math.max(cw, ch), p.dot, easeInOut(soft));
+            const x = p.x0 + cw / 2 + p.drift * e + Math.sin(p.ph + t * 4.2) * p.sway * e;
+            const y = p.y0 + ch / 2 - p.rise * e;
+            const a = Math.pow(1 - t, 1.6);                     // fades softly
+            if (soft < 0.6) { dot(g, dpr, x - size / 2, y - size / 2, size, p.col, a); continue; }
+            g.globalAlpha = a; g.fillStyle = p.col;
+            g.beginPath(); g.arc(x * dpr, y * dpr, (size / 2) * dpr, 0, Math.PI * 2); g.fill();
           }
-          // the hole: opens, holds while the grains fall in, then closes
-          const hp = clamp01(el2 / total);
-          const open = hp < 0.18 ? easeInOut(hp / 0.18) : hp > 0.82 ? 1 - easeInOut((hp - 0.82) / 0.18) : 1;
-          const hr = coreMax * open;
-          if (hr > 0.4) {
-            g.beginPath(); g.arc(cx * dpr, cy * dpr, hr * dpr, 0, Math.PI * 2);
-            g.fillStyle = 'rgb(5,5,6)'; g.fill();
-            g.beginPath(); g.arc(cx * dpr, cy * dpr, (hr + 2.2) * dpr, 0, Math.PI * 2);
-            g.lineWidth = 1.6 * dpr; g.strokeStyle = 'rgba(234,88,12,.75)'; g.stroke();   // its thin orange edge
-            alive = alive || hp < 1;
-          }
+          g.globalAlpha = 1;
           if (!alive) finish();
           return alive;
         },
@@ -781,7 +777,6 @@ export function swallow(el, { sample = null, cols = 48, at = null } = {}) {
     } catch { resolve(); }
   });
 }
-// (the earlier name; closing used to scatter the panel)
 export const dissolve = swallow;
 
 // A button fills up like a jar under a tap: grains rain into it from above (or pour out of `fromRect`, for
@@ -882,7 +877,7 @@ export function cardDust(el, { n = 90, turnMs = 800 } = {}) {
 }
 
 // Every button press fills it with grains like water in a jar; download buttons are filled from the QR in the
-// same window. Closing buttons are left to the black hole.
+// same window. Closing buttons are left to the gentle closing (swallow).
 let buttonsInstalled = false;
 const DOWNLOAD = 'a[download], [data-dl], [data-png], [data-svg], [data-act="svg"], [data-act="png"], [data-card-svg], [data-card-png], [data-card-pdf]';
 const CLOSING = '[data-x], [data-sheet="close"], #rClose, .close-x';

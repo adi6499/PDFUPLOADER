@@ -10,7 +10,7 @@ import { Store, receiveFile, readSmallBody, cleanFileName } from './store.mjs';
 import { BlobStore } from './blobstore.mjs';
 import { ROOT, readJson, loadConfig } from './config.mjs';
 import { Auth, readCookie, COOKIE } from './auth.mjs';
-import { Activity, EVENT_TYPES, istParts, phaseOf, cleanVisitor, cleanDevice, cleanSource, clip, newId, summarise, toCsv } from './activity.mjs';
+import { Activity, EVENT_TYPES, istParts, phaseOf, cleanVisitor, cleanDevice, cleanSource, clip, newId, toCsv } from './activity.mjs';
 
 const PUBLIC = join(ROOT, 'public');
 const MIME = {
@@ -410,22 +410,22 @@ export async function createApp(overrides = {}) {
 
     // the team's visitor numbers, the queries, and the Excel (CSV) copies of both
     if (parts[1] === 'insights' && m === 'GET') {
-      const [all, inquiries] = await Promise.all([activity.events(), activity.inquiries()]);
-      const events = all.filter((e) => !e.team);
       const stamp = istParts().day;
       if (parts[2] === 'visits.csv') {
-        return send(res, 200, toCsv(events, [['Time (India)', (e) => e.time], ['What', (e) => e.type], ['Catalogue', (e) => e.title], ['Brand', (e) => e.brand],
+        return activity.visitsCsv(res, [['Time (India)', (e) => e.time], ['What', (e) => e.type], ['Catalogue', (e) => e.title], ['Brand', (e) => e.brand],
           ['Exhibition', (e) => e.phase], ['Device', (e) => e.device], ['Came from', (e) => e.source], ['Place', (e) => [e.city, e.country].filter(Boolean).join(', ')],
-          ['Name', (e) => e.visitor?.name], ['Email', (e) => e.visitor?.email], ['Company', (e) => e.visitor?.company], ['Phone', (e) => e.visitor?.phone]]),
+          ['Name', (e) => e.visitor?.name], ['Email', (e) => e.visitor?.email], ['Company', (e) => e.visitor?.company], ['Phone', (e) => e.visitor?.phone]],
         { 'Content-Type': 'text/csv; charset=utf-8', 'Content-Disposition': `attachment; filename="catalogue-visits-${stamp}.csv"` });
       }
       if (parts[2] === 'queries.csv') {
+        const inquiries = await activity.inquiries(100000);
         return send(res, 200, toCsv(inquiries, [['Time (India)', (q) => q.time], ['Name', (q) => q.name], ['Company', (q) => q.company], ['Email', (q) => q.email],
           ['Phone', (q) => q.phone], ['Catalogue', (q) => q.title], ['Brand', (q) => q.brand], ['Message', (q) => q.message], ['Exhibition', (q) => q.phase],
           ['Device', (q) => q.device], ['Came from', (q) => q.source], ['Place', (q) => [q.city, q.country].filter(Boolean).join(', ')]]),
         { 'Content-Type': 'text/csv; charset=utf-8', 'Content-Disposition': `attachment; filename="catalogue-queries-${stamp}.csv"` });
       }
-      return send(res, 200, { summary: summarise(events, inquiries, store.list(), exhibition()), events: events.slice(0, 300), inquiries: inquiries.slice(0, 500),
+      const got = await activity.insights(exhibition(), store.list());
+      return send(res, 200, { summary: got.summary, events: got.recent, inquiries: got.inquiries,
         exhibition: exhibition(), keepsVisits: !BLOB, forwards: !!INQUIRY_FORWARD });
     }
     // the exhibition: its name and first and last day (visits are then marked before / during / after)

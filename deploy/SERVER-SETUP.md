@@ -17,6 +17,13 @@ It **replaces the old catalogue hub** on catalog.jinharsh.com (the one-page hub 
 - The program and its uploaded PDFs live in folders **outside** `/www/wwwroot`, so no sync or update can delete them.
 - The address `catalog.jinharsh.com` is printed inside every QR code: it must keep working for as long as cards exist.
 
+## How big a server?
+
+Measured with `npm run bench:memory`: the program uses about **60 MB** resting and stays under **~190 MB** even with
+1,000 page views, 30 PDF downloads at the same time, a 150 MB upload and two years of visitor history. PDFs are
+streamed to and from disk, never held in memory. So a **512 MB** server is enough for the program (aaPanel, Apache and
+MySQL need their own share; with all of them, 1 GB is comfortable). PM2 restarts it if it ever passes 300 MB.
+
 ## 1. Node.js
 
 aaPanel → **App Store** → install **Node.js version manager** (or "PM2 Manager") → install **Node 20 or newer**.

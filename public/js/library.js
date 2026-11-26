@@ -335,7 +335,7 @@ function closeSheet(force, { quiet = false, at = null } = {}) {
   document.body.style.overflow = '';
   if (S.sheetResolve) { const r = S.sheetResolve; S.sheetResolve = null; r('closed'); }
   if (quiet) sh.style.visibility = 'hidden';
-  // closing: a black hole opens where X was pressed and swallows the window, while the veil clears
+  // closing: the window floats away as soft grains, starting where X was pressed, while the veil clears
   const anim = M.play(ov, [{ opacity: 1 }, { opacity: 0 }], { duration: quiet ? 240 : 480, easing: 'ease-in' });
   if (!quiet) swallow(sh, { at });
   ov.style.pointerEvents = 'none';
@@ -531,7 +531,7 @@ function showDone(sh, doc, idx, count, resolveAll, swirl) {
   ui(() => M.bump($('.done .tick', sh), 1.12));
 
   const finish = (next, at) => {
-    // the window is swallowed by a black hole at the button, while the new QR flies into its row in the list
+    // the window floats away from the button as soft grains, while the new QR flies into its row in the list
     const r = $('#doneQr', sh)?.getBoundingClientRect();
     sh.onclick = null; S.sheetResolve = null;
     closeSheet(true, { at });
