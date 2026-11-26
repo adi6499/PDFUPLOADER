@@ -87,6 +87,13 @@ try {
   ok((await fetch(`${BASE}/c/CATALOGUE`)).status === 200, 'capital letters in the link still work');
   const f1 = await fetch(`${BASE}/f/catalogue/1/cat.pdf`, { headers: { Range: 'bytes=0-7' } });
   ok(f1.status === 206 && (await f1.text()) === '%PDF-1.4', 'the PDF can be read in pieces (fast first page)');
+  const js = await fetch(`${BASE}/js/view.js`, { headers: { 'Accept-Encoding': 'br' } });
+  ok(js.headers.get('content-encoding') === 'br' && (await js.text()).includes('openReader'), 'scripts are sent compressed (about 4 times smaller on phones)');
+  const pdfPart = await fetch(`${BASE}/f/catalogue/1/cat.pdf`, { headers: { Range: 'bytes=0-7', 'Accept-Encoding': 'br' } });
+  ok(!pdfPart.headers.get('content-encoding') && (await pdfPart.text()) === '%PDF-1.4', 'PDFs are never compressed, so reading in pieces still works');
+  const hub = await fetch(`${BASE}/`);
+  const hubHtml = await hub.text();
+  ok(hubHtml.includes('id="boot"') && hubHtml.includes('Test Catalogue'), 'the front page arrives with its list inside (one trip less)');
 
   console.log('Replace the PDF');
   r = await j(await T(`/api/docs/catalogue/versions?name=cat-v2.pdf&pages=1`, { method: 'POST', headers: { 'Content-Type': 'application/pdf' }, body: tinyPdf('two') }));

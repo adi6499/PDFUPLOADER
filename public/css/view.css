@@ -117,7 +117,7 @@
 .mc-card:hover { transform: translateY(-3px); }
 .mc-card:active { transform: scale(.98); }
 .mc-cover { aspect-ratio: 4 / 3; background: var(--bg); display: grid; place-items: end center; padding: 12px 12px 0; overflow: hidden; }
-.mc-cover img { max-width: 76%; height: 100%; object-fit: cover; object-position: top; border-radius: 6px 6px 0 0; background: #fff; box-shadow: 0 10px 24px -10px rgba(20,22,28,.3); }
+.mc-cover img { width: auto; max-width: 76%; height: 100%; object-fit: cover; object-position: top; border-radius: 6px 6px 0 0; background: #fff; box-shadow: 0 10px 24px -10px rgba(20,22,28,.3); }
 .mc-cover .blank-cover { width: 76%; height: 100%; border-radius: 6px 6px 0 0; }
 .mc-text { padding: 10px 12px 12px; display: flex; flex-direction: column; gap: 3px; }
 .mc-brand { font-size: 11px; font-weight: 700; color: var(--muted); text-transform: uppercase; letter-spacing: .06em; }

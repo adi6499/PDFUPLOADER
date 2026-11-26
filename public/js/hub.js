@@ -52,8 +52,11 @@ $('#cards').innerHTML = Array.from({ length: 6 }, () => '<div class="cat-card gh
 
 async function load() {
   try {
-    const r = await fetch('/api/catalogs');
-    const j = await r.json();
+    // the server puts the list inside the page; only a "Try again" fetches it
+    let j = null;
+    const boot = document.getElementById('boot');
+    if (boot) { try { j = JSON.parse(boot.textContent); } catch {} boot.remove(); }
+    if (!j) { const r = await fetch('/api/catalogs'); j = await r.json(); }
     S.all = j.catalogs || []; S.publicUrl = (j.publicUrl || location.origin).replace(/\/$/, ''); S.site = j.site || {}; S.printable = j.printable !== false;
   } catch {
     $('#cards').innerHTML = `<div class="ju-card empty-hub"><h3>The catalogues could not be loaded</h3><p class="ju-muted">Please check the internet connection and try again.</p><button class="ju-btn primary" type="button" data-reload>Try again</button></div>`;
@@ -75,12 +78,12 @@ function visible() {
     (!q || [d.title, d.brand, d.category, d.note].join(' ').toLowerCase().includes(q)));
 }
 
-function card(d) {
+function card(d, i = 99) {
   const meta = d.waiting ? (d.sourceUrl ? 'On the maker’s website' : 'Coming soon')
     : [d.pages ? `${d.pages} pages` : null, fmtSize(d.size)].filter(Boolean).join(' · ');
   return `<article class="cat-card${d.waiting ? ' is-waiting' : ''}" data-key="${esc(d.code)}">
     <a class="cc-link" href="/c/${esc(d.code)}" aria-label="${esc(d.title)}">
-      <div class="cc-cover">${d.cover ? `<img src="${esc(d.cover)}" alt="" loading="lazy" decoding="async" style="view-transition-name:cover-${esc(d.code)}">` : blankCover(d)}</div>
+      <div class="cc-cover">${d.cover ? `<img src="${esc(d.cover)}" alt="" width="${d.coverW || 720}" height="${d.coverH || 1018}" loading="${i < 4 ? 'eager' : 'lazy'}" decoding="async"${i < 2 ? ' fetchpriority="high"' : ''} style="view-transition-name:cover-${esc(d.code)}">` : blankCover(d)}</div>
       <div class="cc-body">
         <div class="cc-top">${d.brand ? `<span class="brand-pill">${esc(d.brand)}</span>` : ''}${d.category ? `<span class="cc-cat">${esc(d.category)}</span>` : ''}</div>
         <h3>${esc(d.title)}</h3>

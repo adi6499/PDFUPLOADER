@@ -3,7 +3,12 @@ import { icon } from '/vendor/icons.js';
 import { qrSvg, qrSvgFile, qrPng, saveBlob } from './qr.js';
 import * as M from './motion.js';
 import { assemble, enableHoverScatter, enableButtonParticles, swallow, sparkle } from './particles.js';
-import { cardSheet } from './card.js';
+// the visiting card code is only needed when someone opens a card: fetched quietly once the page is idle
+const loadCard = () => import('./card.js');
+export const idle = (fn, wait = 1500) => { try { setTimeout(() => (window.requestIdleCallback || ((f) => setTimeout(f, 1)))(() => { try { fn(); } catch {} }, { timeout: 4000 }), wait); } catch {} };
+// fetch a script ahead of time without running it (it runs only when it is first used)
+export const warmModule = (href) => { try { if (document.querySelector(`link[rel="modulepreload"][href="${href}"]`)) return; const l = document.createElement('link'); l.rel = 'modulepreload'; l.href = href; document.head.appendChild(l); } catch {} };
+idle(() => warmModule('/js/card.js'), 2500);
 import { copyText, showCopied, flashLink } from './copy.js';
 
 enableHoverScatter();    // big QR codes: the grains scatter away from the mouse or finger
@@ -137,7 +142,10 @@ export function shareSheet({ link, title, from = null, site = {}, printable = tr
     }
     if (b.matches('[data-png]')) { saveBlob(await qrPng(link, true, 2000), `QR ${safe}.png`); toast('QR picture saved'); }
     if (b.matches('[data-more]')) { try { await navigator.share({ title, text: title, url: link }); } catch {} }
-    if (b.matches('[data-card]')) { cardSheet({ link, title, site, printable, from: b }); close(centreOf(b)); }
+    if (b.matches('[data-card]')) {
+      loadCard().then((m) => m.cardSheet({ link, title, site, printable, from: b })).catch(() => toast('Could not open the card. Please try again.'));
+      close(centreOf(b));
+    }
   });
   // the grains come out of the button that was pressed (or from all around)
   setTimeout(() => assemble(ov.querySelector('.qr-big'), link, { from }), 60);

@@ -3,6 +3,8 @@
 //   - the company server (and this computer): files on the server's own disk      -> server/server.mjs
 //   - a hosted trial copy on Vercel: files in Vercel's Blob store                -> api/index.js
 import { promises as fs, createReadStream, existsSync } from 'node:fs';
+import zlib from 'node:zlib';
+import { promisify } from 'node:util';
 import { join, resolve, extname, sep } from 'node:path';
 import { Store, receiveFile, readSmallBody, cleanFileName } from './store.mjs';
 import { BlobStore } from './blobstore.mjs';
@@ -19,6 +21,41 @@ const MIME = {
   '.webmanifest': 'application/manifest+json',
 };
 const BLOB_HOSTS = 'https://*.public.blob.vercel-storage.com';
+
+// ---------- smaller downloads: text files are sent compressed (brotli, or gzip for older browsers) ----------
+// A phone on a slow connection gets about a quarter of the bytes. Each file is compressed once and kept in memory
+// until it changes on disk.
+const brotli = promisify(zlib.brotliCompress), gzip = promisify(zlib.gzip);
+const COMPRESSIBLE = /^(text\/|application\/(json|manifest\+json)|image\/svg\+xml)/;
+function encodingFor(req, type, size) {
+  if (!COMPRESSIBLE.test(type) || size < 1024 || req.headers.range) return null;
+  const a = String(req.headers['accept-encoding'] || '');
+  return /\bbr\b/.test(a) ? 'br' : /\bgzip\b/.test(a) ? 'gzip' : null;
+}
+const squeeze = (buf, enc) => (enc === 'br'
+  ? brotli(buf, { params: { [zlib.constants.BROTLI_PARAM_QUALITY]: buf.length > 300000 ? 6 : 10, [zlib.constants.BROTLI_PARAM_SIZE_HINT]: buf.length } })
+  : gzip(buf, { level: 9 }));
+const packedFiles = new Map(); // path -> { key, br, gzip } (promises)
+function packedFile(path, st, enc) {
+  const key = st.size + ':' + st.mtimeMs;
+  let p = packedFiles.get(path);
+  if (!p || p.key !== key) { p = { key }; packedFiles.set(path, p); }
+  if (!p[enc]) p[enc] = fs.readFile(path).then((raw) => squeeze(raw, enc)).catch((e) => { delete p[enc]; throw e; });
+  return p[enc];
+}
+// a page or list made for this visit: compressed on the spot (quick, they are small)
+function sendPacked(req, res, status, body, headers = {}) {
+  const text = typeof body === 'string' ? body : JSON.stringify(body);
+  const type = headers['Content-Type'] || (typeof body === 'string' ? 'text/plain; charset=utf-8' : 'application/json; charset=utf-8');
+  const buf = Buffer.from(text);
+  const enc = encodingFor(req, type, buf.length);
+  if (!enc) return send(res, status, text, { 'Content-Type': type, ...headers });
+  const out = enc === 'br'
+    ? zlib.brotliCompressSync(buf, { params: { [zlib.constants.BROTLI_PARAM_QUALITY]: 5 } })
+    : zlib.gzipSync(buf, { level: 6 });
+  res.writeHead(status, { 'Cache-Control': 'no-store', 'X-Content-Type-Options': 'nosniff', ...headers, 'Content-Type': type, 'Content-Encoding': enc, Vary: 'Accept-Encoding', 'Content-Length': out.length });
+  res.end(out);
+}
 
 function send(res, status, body, headers = {}) {
   const isBuf = Buffer.isBuffer(body);
@@ -94,14 +131,23 @@ export async function createApp(overrides = {}) {
     let st;
     try { st = await fs.stat(path); } catch { return fail(res, 404, 'Not found'); }
     if (!st.isFile()) return fail(res, 404, 'Not found');
-    const etag = `"${st.size.toString(36)}-${Math.floor(st.mtimeMs).toString(36)}"`;
+    const enc = encodingFor(req, type, st.size);
+    const etag = `"${st.size.toString(36)}-${Math.floor(st.mtimeMs).toString(36)}${enc ? '-' + enc : ''}"`;
     const headers = {
       'Content-Type': type, 'Accept-Ranges': 'bytes', ETag: etag, 'Last-Modified': st.mtime.toUTCString(),
       'X-Content-Type-Options': 'nosniff',
       'Cache-Control': immutable ? 'public, max-age=31536000, immutable' : maxAge ? `public, max-age=${maxAge}` : 'no-cache',
     };
+    if (COMPRESSIBLE.test(type)) headers.Vary = 'Accept-Encoding';
     if (disposition) headers['Content-Disposition'] = disposition;
     if (req.headers['if-none-match'] === etag) { res.writeHead(304, headers); return res.end(); }
+    if (enc) {
+      try {
+        const body = await packedFile(path, st, enc);
+        res.writeHead(200, { ...headers, 'Content-Encoding': enc, 'Content-Length': body.length });
+        return res.end(req.method === 'HEAD' ? undefined : body);
+      } catch { /* fall back to the plain file below */ }
+    }
     const range = /^bytes=(\d*)-(\d*)$/.exec(req.headers.range || '');
     if (range && (range[1] || range[2])) {
       let start = range[1] ? Number(range[1]) : st.size - Number(range[2]);
@@ -129,6 +175,19 @@ export async function createApp(overrides = {}) {
     return sendFile(req, res, full, type, { maxAge: /^\/vendor\/(pdfjs|fonts)\//.test(rel) ? 604800 : 0 });
   }
 
+  // ---------- the front page: / ----------
+  let hubTemplate = null;
+  async function serveHub(req, res) {
+    if (!hubTemplate || cfg.dev) hubTemplate = await fs.readFile(join(PUBLIC, 'index.html'), 'utf8');
+    const list = store.list().filter((d) => d.status === 'live').map(publicDoc);
+    // the same order the page shows: catalogues with a PDF first, newest first
+    const first = list.filter((d) => !d.waiting && d.cover).sort((a, b) => String(b.updatedAt).localeCompare(String(a.updatedAt))).slice(0, 2);
+    const preload = first.map((d) => `<link rel="preload" as="image" href="${esc(d.cover)}">`).join('\n  ');
+    const data = JSON.stringify({ catalogs: list, publicUrl: base(req), site: SITE, printable: PRINTABLE }).replace(/</g, '\\u003c');
+    const html = hubTemplate.replace('<!--PRELOAD-->', preload).replace('<!--DATA-->', `<script type="application/json" id="boot">${data}</script>`);
+    sendPacked(req, res, 200, html, { 'Content-Type': 'text/html; charset=utf-8', 'Content-Security-Policy': CSP, 'Cache-Control': 'no-cache' });
+  }
+
   // ---------- the scan page: /c/<code> ----------
   let viewTemplate = null;
   async function serveView(req, res, code) {
@@ -138,7 +197,7 @@ export async function createApp(overrides = {}) {
     let state, meta;
     // the other catalogues, for the "More catalogues" list under each one
     const others = store.list().filter((d) => d.status === 'live' && d.code !== code).map(publicDoc).filter((p) => !p.waiting)
-      .slice(0, 24).map((p) => ({ code: p.code, title: p.title, brand: p.brand, cover: p.cover, pages: p.pages }));
+      .slice(0, 24).map((p) => ({ code: p.code, title: p.title, brand: p.brand, cover: p.cover, coverW: p.coverW, coverH: p.coverH, pages: p.pages }));
     if (doc && doc.status === 'live') {
       const p = publicDoc(doc);
       state = { status: p.waiting ? 'waiting' : 'live', doc: p, countsScans: !BLOB, others };
@@ -154,6 +213,8 @@ export async function createApp(overrides = {}) {
         `<meta property="og:site_name" content="${esc(SITE.company?.name || 'Jinharsh')}">`,
         img ? `<meta property="og:image" content="${esc(img)}">` : '',
         img ? `<meta name="twitter:card" content="summary_large_image">` : '',
+        // the cover is the biggest thing on the page: fetch it straight away, not after the scripts have run
+        p.cover ? `<link rel="preload" as="image" href="${esc(p.cover)}" fetchpriority="high">` : '',
         TRIAL ? `<meta name="robots" content="noindex">` : '',
       ].join('\n  ');
     } else {
@@ -162,7 +223,7 @@ export async function createApp(overrides = {}) {
     }
     const data = JSON.stringify({ ...state, site: SITE, publicUrl: B, printable: PRINTABLE }).replace(/</g, '\\u003c');
     const html = viewTemplate.replace('<!--META-->', meta).replace('<!--DATA-->', `<script type="application/json" id="boot">${data}</script>`);
-    send(res, doc ? 200 : 404, html, { 'Content-Type': 'text/html; charset=utf-8', 'Content-Security-Policy': CSP, 'Cache-Control': 'no-cache' });
+    sendPacked(req, res, doc ? 200 : 404, html, { 'Content-Type': 'text/html; charset=utf-8', 'Content-Security-Policy': CSP, 'Cache-Control': 'no-cache' });
   }
 
   // ---------- uploads ----------
@@ -237,7 +298,7 @@ export async function createApp(overrides = {}) {
     // public: every live catalogue, for the front page
     if (parts[1] === 'catalogs' && m === 'GET') {
       const list = store.list().filter((d) => d.status === 'live').map(publicDoc);
-      return send(res, 200, { catalogs: list, publicUrl: base(req), site: SITE, printable: PRINTABLE }, { 'Cache-Control': 'public, max-age=30' });
+      return sendPacked(req, res, 200, { catalogs: list, publicUrl: base(req), site: SITE, printable: PRINTABLE }, { 'Cache-Control': 'public, max-age=30' });
     }
 
     if (m !== 'GET' && m !== 'HEAD' && !sameOrigin(req)) { req.resume(); return fail(res, 403, 'Not allowed from another website.'); }
@@ -407,7 +468,7 @@ export async function createApp(overrides = {}) {
       if (path === '/' || path === '/index.html') {
         const cat = url.searchParams.get('cat');
         if (cat && /^[A-Za-z0-9-]{1,40}$/.test(cat)) return redirect(res, '/c/' + cat.toLowerCase());
-        return await serveStatic(req, res, '/index.html');
+        return await serveHub(req, res);
       }
       // the team screen
       if (path === '/team' || path === '/team/' || path === '/team.html') return await serveStatic(req, res, isTeam(req) ? '/team.html' : '/login.html');

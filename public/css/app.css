@@ -2,8 +2,8 @@
    Rules kept from the kit brief: flat page, solid cards, glass only on floating things, one accent,
    animations only move things (nothing starts invisible), nothing reacts to scrolling. */
 
-@font-face { font-family: "Geist"; src: url("/vendor/fonts/Geist-Variable.woff2") format("woff2"); font-weight: 100 900; font-style: normal; font-display: swap; }
-@font-face { font-family: "Geist Mono"; src: url("/vendor/fonts/GeistMono-Variable.woff2") format("woff2"); font-weight: 100 900; font-style: normal; font-display: swap; }
+@font-face { font-family: "Geist"; src: url("/vendor/fonts/Geist-Latin.woff2") format("woff2"); font-weight: 100 900; font-style: normal; font-display: swap; }
+@font-face { font-family: "Geist Mono"; src: url("/vendor/fonts/GeistMono-Latin.woff2") format("woff2"); font-weight: 100 900; font-style: normal; font-display: swap; }
 
 .ju { color-scheme: light; }
 .ju.dark { color-scheme: dark; }

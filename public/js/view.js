@@ -3,7 +3,7 @@
 import { icon } from '/vendor/icons.js';
 import { pdfjs, PDF_OPTS, fmtSize } from './pdfkit.js';
 import * as M from './motion.js';
-import { esc, ui, contactHtml, shareSheet, qrSheet, blankCover } from './site.js';
+import { esc, ui, contactHtml, shareSheet, qrSheet, blankCover, idle, warmModule } from './site.js';
 import { bindImage, swallow, formPage, perf } from './particles.js';
 
 const $ = (s, el = document) => el.querySelector(s);
@@ -26,7 +26,7 @@ function othersHtml() {
   return `<section class="more-cats">
     <div class="mc-head"><h2>More catalogues</h2><a class="ju-btn sm ghost" href="/">${icon('book-open')}See all</a></div>
     <div class="mc-grid">${list.map((o) => `<a class="mc-card" href="/c/${esc(o.code)}">
-      <div class="mc-cover">${o.cover ? `<img src="${esc(o.cover)}" alt="" loading="lazy" decoding="async" style="view-transition-name:cover-${esc(o.code)}">` : blankCover(o)}</div>
+      <div class="mc-cover">${o.cover ? `<img src="${esc(o.cover)}" alt="" width="${o.coverW || 720}" height="${o.coverH || 1018}" loading="lazy" decoding="async" style="view-transition-name:cover-${esc(o.code)}">` : blankCover(o)}</div>
       <div class="mc-text">${o.brand ? `<span class="mc-brand">${esc(o.brand)}</span>` : ''}<b>${esc(o.title)}</b></div>
     </a>`).join('')}</div>
   </section>`;
@@ -106,10 +106,15 @@ function showDoc() {
   // "Read now" (or the cover) opens the reader over the page
   const read = () => openReader();
   $('#readBtn').addEventListener('click', read);
+  // get the PDF reader ready before it is needed: when a finger or the mouse comes near Read now, or (on a
+  // fast phone, without data saver) once the page has settled. It is 474 KB, so it never delays the page itself.
+  const warm = () => { pdfjs().catch(() => {}); };
+  for (const t of ['pointerenter', 'pointerdown', 'focus']) $('#readBtn').addEventListener(t, warm, { once: true, passive: true });
+  // (when idle it is only downloaded, not run, so it costs the phone nothing until Read now)
+  if (!perf.lite && !(navigator.connection && navigator.connection.saveData)) idle(() => warmModule('/vendor/pdfjs/pdf.min.mjs'), 3500);
   ui(() => $('.v-cover img').addEventListener('click', read));
   document.querySelectorAll('a[download]').forEach((a) => a.addEventListener('click', () => M.nudgeDown(a.querySelector('.i'))));
   // start fetching the reader in the background, so it opens fast
-  ui(() => setTimeout(() => { pdfjs().catch(() => {}); }, 1200));
   wireCommon(D.title, linkOf(D.code));
 
   // one count per visit (the team's own "Open page" adds ?preview=1 and is not counted)
