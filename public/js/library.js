@@ -1,6 +1,6 @@
 // The team's screen: upload PDFs, see each one's permanent QR code, replace files, archive.
 // Every QR carries the Jinharsh logo in the middle.
-import { icon } from '/vendor/icons.js';
+import { icon } from '/vendor/icons.js?v=2';
 import * as API from './api.js';
 import { qrSvg, qrSvgFile, qrPng, saveBlob } from './qr.js';
 import { inspectPdf, fmtSize, makeThumb } from './pdfkit.js';
@@ -9,6 +9,7 @@ import { blankCover } from './site.js';
 import { collapseFrom, assemble, enableHoverScatter, enableButtonParticles, swallow, formPage, morphQR, pourInto, stream } from './particles.js';
 import { takeFiles } from './handoff.js';
 import { cardSheet } from './card.js';
+import { openInsights } from './insights.js';
 import { copyText, showCopied, flashLink } from './copy.js';
 
 const $ = (s, el = document) => el.querySelector(s);
@@ -53,6 +54,7 @@ async function start() {
     $('#searchIcon').outerHTML = icon('search');
     $('#dropIcon').outerHTML = icon('upload', 'bob');
     $('#uploadBtn').innerHTML = icon('upload') + 'Upload PDF';
+    $('#insightsBtn').innerHTML = icon('chart-column') + 'Visitors & queries';
     $('#settingsBtn').innerHTML = icon('settings');
     $('#siteBtn').innerHTML = icon('globe');
     paintThemeBtn();
@@ -109,6 +111,17 @@ async function fillThumbs() {
   if (filling) return;
   filling = true;
   try {
+    // first: catalogues brought in with a PDF but no cover yet (for example by the hub import)
+    const bare = (S.docs || []).filter((d) => d.live && !d.live.waiting && !d.live.cover && d.live.file && d.live.version).slice(0, 20);
+    for (const d of bare) {
+      try {
+        const blob = await (await fetch(d.live.file)).blob();
+        const info = await inspectPdf(new File([blob], d.live.name || 'catalogue.pdf', { type: 'application/pdf' }));
+        let got = await API.putCover(d.code, d.live.version, info.cover, info.coverW, info.coverH);
+        try { const t = await makeThumb(info.canvas); got = await API.putThumb(d.code, d.live.version, t.blob, t.w, t.h); } catch {}
+        putDoc(got);
+      } catch { /* next time */ }
+    }
     const todo = (S.docs || []).filter((d) => d.live && d.live.cover && !d.live.thumb && d.live.version).slice(0, 60);
     for (const d of todo) {
       try {
@@ -640,17 +653,43 @@ function detailsSheet(d) {
       <label class="field"><span>Category</span><input class="ju-inp" id="edCat" maxlength="60" value="${esc(d.category || '')}" list="dlCats" placeholder="e.g. Bearings" autocomplete="off"></label>
     </div>
     <label class="field"><span>Short description</span><textarea class="ju-inp ta" id="edNote" maxlength="300" rows="3" placeholder="One or two lines shown on the catalogue card">${esc(d.note || '')}</textarea></label>
-    <label class="field"><span>Maker’s own copy (optional)</span><input class="ju-inp" id="edSrc" maxlength="500" value="${esc(d.sourceUrl || '')}" placeholder="https://… (used only while there is no PDF here)" autocomplete="off"></label>
-    <div class="sheet-foot"><button class="ju-btn ghost" type="button" data-sheet="close">Cancel</button><button class="ju-btn primary" type="button" id="edSave">Save</button></div>`);
+    <label class="field"><span>Maker’s own copy or interactive guide (optional)</span><input class="ju-inp" id="edSrc" maxlength="500" value="${esc(d.sourceUrl || '')}" placeholder="https://… (used only while there is no PDF here)" autocomplete="off"></label>
+    <div class="media-edit">
+      <div class="me-head"><b>Videos & proof</b><small>Shown on the catalogue's page: product videos, installation videos, trials & recommendations. Paste a YouTube or Vimeo link (it plays on the page), or any web page or PDF.</small></div>
+      <div class="me-rows" id="edMedia">${(d.media || []).map(mediaRow).join('')}</div>
+      <button class="ju-btn sm" type="button" id="edAddMedia">${icon('plus')}Add a video or proof</button>
+    </div>
+    <div class="sheet-foot"><button class="ju-btn ghost" type="button" data-sheet="close">Cancel</button><button class="ju-btn primary" type="button" id="edSave">Save</button></div>`, { wide: true });
+  const rows = $('#edMedia', sh);
+  $('#edAddMedia', sh).addEventListener('click', () => {
+    rows.insertAdjacentHTML('beforeend', mediaRow({ kind: 'video', title: '', url: '' }));
+    const r = rows.lastElementChild; M.rise([r], { y: 8 }); r.querySelector('[data-f="url"]').focus();
+  });
+  rows.addEventListener('click', (e) => { const x = e.target.closest('[data-del]'); if (x) { const r = x.closest('.me-row'); M.slideAway ? M.slideAway(r).then(() => r.remove()) : r.remove(); } });
+  const readMedia = () => [...rows.querySelectorAll('.me-row')].map((r) => ({ kind: r.querySelector('[data-f="kind"]').value, title: r.querySelector('[data-f="title"]').value.trim(), url: r.querySelector('[data-f="url"]').value.trim() })).filter((m) => m.url);
   const go = async () => {
     const t = $('#edTitle', sh).value.trim(); if (!t) { M.shake($('#edTitle', sh)); return; }
     try {
-      putDoc(await API.updateDoc(d.code, { title: t, brand: $('#edBrand', sh).value, category: $('#edCat', sh).value, note: $('#edNote', sh).value, sourceUrl: $('#edSrc', sh).value }));
+      const media = readMedia();
+      const bad = media.find((m) => !/^https?:\/\/\S+\.\S+/i.test(m.url));
+      if (bad) { toast('A link must start with https://'); M.shake(rows); return; }
+      putDoc(await API.updateDoc(d.code, { title: t, brand: $('#edBrand', sh).value, category: $('#edCat', sh).value, note: $('#edNote', sh).value, sourceUrl: $('#edSrc', sh).value, media }));
       closeSheet(true); render(); toast('Saved');
     } catch (e) { toast(e.message); }
   };
   $('#edSave', sh).addEventListener('click', go);
   $('#edTitle', sh).addEventListener('keydown', (e) => { if (e.key === 'Enter') go(); });
+}
+
+// one line in "Videos & proof": what it is, its name, its link
+function mediaRow(m) {
+  const kinds = [['video', 'Product video'], ['install', 'Installation video'], ['trial', 'Trial / proof']];
+  return `<div class="me-row">
+    <select class="ju-inp" data-f="kind" aria-label="What it is">${kinds.map(([k, l]) => `<option value="${k}"${m.kind === k ? ' selected' : ''}>${l}</option>`).join('')}</select>
+    <input class="ju-inp" data-f="title" maxlength="120" placeholder="Name, e.g. Mounting a spherical bearing" value="${esc(m.title || '')}" aria-label="Name">
+    <input class="ju-inp" data-f="url" maxlength="500" placeholder="https://youtu.be/…" value="${esc(m.url || '')}" aria-label="Link" inputmode="url">
+    <button class="ju-icon" type="button" data-del aria-label="Remove">${icon('trash-2')}</button>
+  </div>`;
 }
 
 // leaving = the code of a row that will disappear from this list (it slides away first)
@@ -704,6 +743,7 @@ function paintThemeBtn() {
 // ---------- wiring ----------
 function wire() {
   $('#uploadBtn').addEventListener('click', (e) => pickFiles(e.currentTarget));
+  $('#insightsBtn').addEventListener('click', (e) => openInsights({ from: e.currentTarget }));
   $('#fileInput').addEventListener('change', (e) => { const f = [...e.target.files]; e.target.value = ''; startUpload(f); });
   $('#replaceInput').addEventListener('change', (e) => { const f = e.target.files[0]; e.target.value = ''; startReplace(f); });
   $('#settingsBtn').addEventListener('click', settingsSheet);

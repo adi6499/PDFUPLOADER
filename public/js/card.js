@@ -8,7 +8,7 @@
 //   cardPdf(opts)           both sides in one PDF, with bleed: the file to send to the print shop
 //   cardPng(side, opts)     a 300 dpi picture of one side
 //   printCard(opts)         prints both sides at real size
-import { icon, ICONS } from '/vendor/icons.js';
+import { icon, ICONS } from '/vendor/icons.js?v=2';
 import { qrSvg, saveBlob } from './qr.js';
 import * as M from './motion.js';
 import { bindImage, swallow, cardDust } from './particles.js';

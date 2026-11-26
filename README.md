@@ -25,11 +25,17 @@ Set it once, before printing anything.
 | Page | Address | Who |
 |---|---|---|
 | All catalogues, brand filters, search, a QR for each | `/` | everyone |
-| One catalogue: cover, Read now, Download, Share, QR, more catalogues | `/c/<code>` | everyone (this is what a QR opens) |
-| Team: upload, QR codes for printing, replace, edit details, archive | `/team` | the Jinharsh team |
+| QR Studio: every QR code (PNG / SVG / visiting card, or all in one ZIP) for posters and cards | `/?qr=1` | the team (Dhwani) |
+| One catalogue: cover, Read now, Download, Share, QR, menu of all catalogues, videos & proof, "Send a query" | `/c/<code>` | everyone (this is what a QR opens) |
+| Team: upload, QR codes for printing, replace, edit details (incl. videos & trials), archive, **Visitors & queries** | `/team` | the Jinharsh team |
 
 Links from the old catalog.jinharsh.com hub keep working: `/?cat=<name>` opens `/c/<name>`.
-`npm run import-hub` brings the old hub's catalogues across with the same names (they wait for their PDF).
+`npm run import-hub` brings the hub's catalogues across with the same names (Mitul's 12 + 3 older ones).
+
+**Sales side** (like Mitul's hub): the first download on a device asks, optionally, who is downloading; "Send a query"
+saves the visitor's question (and sends a copy to Odoo when `inquiryForward` is set); every visit, read, download,
+share and video is counted. The team sees it all under Visitors & queries, split before / during / after an
+exhibition when its dates are set, with Excel (CSV) downloads. Data: `data/events.jsonl` and `data/inquiries.jsonl`.
 
 ## Run it on this computer
 

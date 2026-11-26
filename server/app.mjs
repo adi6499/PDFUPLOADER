@@ -10,6 +10,7 @@ import { Store, receiveFile, readSmallBody, cleanFileName } from './store.mjs';
 import { BlobStore } from './blobstore.mjs';
 import { ROOT, readJson, loadConfig } from './config.mjs';
 import { Auth, readCookie, COOKIE } from './auth.mjs';
+import { Activity, EVENT_TYPES, istParts, phaseOf, cleanVisitor, cleanDevice, cleanSource, clip, newId, summarise, toCsv } from './activity.mjs';
 
 const PUBLIC = join(ROOT, 'public');
 const MIME = {
@@ -75,7 +76,7 @@ async function readJsonBody(req, max = 64 * 1024) { return JSON.parse((await rea
 // overrides (for tests): { config: {...}, blobApi, blobToken, fetch, handleUpload }
 export async function createApp(overrides = {}) {
   const C = { ...loadConfig(), ...(overrides.config || {}) };
-  const { cfg, PUBLIC_URL, DATA_DIR, MAX_UPLOAD, TRUST_PROXY, PRINTABLE, LOOPBACK, STORAGE, TRIAL, TEAM_OPEN } = C;
+  const { cfg, PUBLIC_URL, DATA_DIR, MAX_UPLOAD, TRUST_PROXY, PRINTABLE, LOOPBACK, STORAGE, TRIAL, TEAM_OPEN, INQUIRY_FORWARD } = C;
   const SITE = readJson(join(ROOT, 'site.json'));
   const VERSION = readJson(join(ROOT, 'package.json')).version || '0';
   const BLOB = STORAGE === 'blob';
@@ -89,6 +90,8 @@ export async function createApp(overrides = {}) {
   }
   await store.load();
   const storageReady = () => store.ready !== false;
+  // visits, downloads and queries (see activity.mjs); on the trial copy there is no disk for them
+  const activity = new Activity({ dir: BLOB ? null : DATA_DIR, store });
 
   const auth = new Auth(DATA_DIR);
   // Who may use the team screen:
@@ -107,13 +110,14 @@ export async function createApp(overrides = {}) {
     try { const u = new URL(o); return u.host === req.headers.host || u.host === req.headers['x-forwarded-host'] || (PUBLIC_URL && u.origin === new URL(PUBLIC_URL).origin); } catch { return false; }
   }
   const CSP = [
-    "default-src 'self'", `img-src 'self' data: blob:${BLOB ? ' ' + BLOB_HOSTS : ''}`, "style-src 'self' 'unsafe-inline'", "font-src 'self' data: blob:",
+    "default-src 'self'", `img-src 'self' data: blob: https://i.ytimg.com${BLOB ? ' ' + BLOB_HOSTS : ''}`,
+    "frame-src https://www.youtube-nocookie.com https://player.vimeo.com", "style-src 'self' 'unsafe-inline'", "font-src 'self' data: blob:",
     "script-src 'self' 'wasm-unsafe-eval'", "worker-src 'self' blob:", `connect-src 'self'${BLOB ? ' ' + BLOB_HOSTS + ' https://vercel.com' : ''}`, "object-src 'none'",
     "base-uri 'none'", "frame-ancestors 'self'", "form-action 'self'",
   ].join('; ');
 
   function publicDoc(doc) {
-    const basics = { code: doc.code, title: doc.title, note: doc.note || '', brand: doc.brand || '', category: doc.category || '', status: doc.status };
+    const basics = { code: doc.code, title: doc.title, note: doc.note || '', brand: doc.brand || '', category: doc.category || '', status: doc.status, media: doc.media || [] };
     const v = doc.versions.find((x) => x.v === doc.current) || doc.versions[doc.versions.length - 1];
     if (!v) return { ...basics, waiting: true, sourceUrl: doc.sourceUrl || '', updatedAt: doc.updatedAt, cover: null };
     const file = BLOB ? v.url : `/f/${doc.code}/${v.v}/${encodeURIComponent(v.name)}`;
@@ -127,6 +131,49 @@ export async function createApp(overrides = {}) {
       thumb: v.thumb ? (BLOB ? v.thumb.url : `/cover/${doc.code}/${v.v}-t.${v.thumb.ext}`) : null,
     };
   }
+  // ---------- visitors ----------
+  const exhibition = () => store.db.settings?.exhibition || null;
+  // the city and country, when the host in front of us adds them (Vercel, Cloudflare); otherwise left empty
+  function placeOf(req) {
+    const h = req.headers, dec = (v) => { try { return decodeURIComponent(String(v || '')); } catch { return ''; } };
+    if (C.ON_VERCEL) return { city: clip(dec(h['x-vercel-ip-city']), 60), country: clip(h['x-vercel-ip-country'], 4) };
+    if (TRUST_PROXY) return { city: clip(dec(h['cf-ipcity']), 60), country: clip(h['cf-ipcountry'], 4) };
+    return { city: '', country: '' };
+  }
+  function recordEvent(req, b) {
+    const type = EVENT_TYPES.includes(b.type) ? b.type : null;
+    if (!type) return;
+    const doc = b.code ? store.get(String(b.code)) : null;
+    if (b.code && !doc) return;
+    if (type === 'visit' && doc && doc.status === 'live') store.countScan(doc);
+    const t = istParts(), place = placeOf(req);
+    activity.add({ id: newId(), at: new Date().toISOString(), time: t.time, day: t.day, hour: t.hour, phase: phaseOf(exhibition(), t.day), type,
+      code: doc ? doc.code : '', title: doc ? doc.title : '', brand: doc ? doc.brand || '' : '',
+      device: cleanDevice(b.device), source: cleanSource(b.source), city: place.city, country: place.country,
+      visitor: cleanVisitor(b.visitor),
+      // someone signed in to the team page (not just the open office copy) is left out of the numbers
+      team: auth.passwordSet && !!auth.checkToken(readCookie(req, COOKIE)) || undefined });
+  }
+  // a copy of each query to the company's Odoo bridge (same fields Mitul's hub sends); never holds the visitor up
+  function forwardInquiry(q) {
+    if (!INQUIRY_FORWARD) return;
+    let host = '';
+    try { host = new URL(PUBLIC_URL).hostname; } catch {}
+    const body = JSON.stringify({ name: q.name, email: q.email, phone: q.phone, company: q.company,
+      message: (q.title ? `[Catalogue: ${q.title}] ` : '') + q.message, source_domain: host, product_category: q.brand || 'Catalogues' });
+    (overrides.forwardFetch || fetch)(INQUIRY_FORWARD, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body, signal: AbortSignal.timeout(5000) }).catch(() => {});
+  }
+  // a few requests a minute per address at most (stops robots filling the files)
+  const hits = new Map();
+  function tooMany(req, kind, max, windowMs) {
+    const key = kind + ' ' + clientIp(req), now = Date.now();
+    let h = hits.get(key);
+    if (!h || now > h.until) { h = { n: 0, until: now + windowMs }; hits.set(key, h); }
+    h.n++;
+    if (hits.size > 5000) for (const [k, v] of hits) if (now > v.until) hits.delete(k);
+    return h.n > max;
+  }
+
   const teamDoc = (req, doc) => ({ ...doc, link: `${base(req)}/c/${doc.code}`, live: publicDoc(doc) });
 
   async function sendFile(req, res, path, type, { immutable = false, disposition = null, maxAge = 0 } = {}) {
@@ -200,9 +247,11 @@ export async function createApp(overrides = {}) {
     // the other catalogues, for the "More catalogues" list under each one
     const others = store.list().filter((d) => d.status === 'live' && d.code !== code).map(publicDoc).filter((p) => !p.waiting)
       .slice(0, 24).map((p) => ({ code: p.code, title: p.title, brand: p.brand, cover: p.cover, thumb: p.thumb, coverW: p.coverW, coverH: p.coverH, pages: p.pages }));
+    const menu = store.list().filter((d) => d.status === 'live').map(publicDoc)
+      .map((p) => ({ code: p.code, title: p.title, brand: p.brand, category: p.category, thumb: p.thumb || p.cover, waiting: !!p.waiting, link: !!p.waiting && !!p.sourceUrl && !/\.pdf(\?|#|$)/i.test(p.sourceUrl) }));
     if (doc && doc.status === 'live') {
       const p = publicDoc(doc);
-      state = { status: p.waiting ? 'waiting' : 'live', doc: p, countsScans: !BLOB, others };
+      state = { status: p.waiting ? 'waiting' : 'live', doc: p, countsScans: !BLOB, others, menu };
       const desc = [p.pages ? p.pages + ' pages' : null, 'PDF', SITE.company?.short || 'Jinharsh'].filter(Boolean).join(' · ');
       const img = p.cover ? (p.cover.startsWith('http') ? p.cover : B + p.cover) : '';
       meta = [
@@ -220,7 +269,7 @@ export async function createApp(overrides = {}) {
         TRIAL ? `<meta name="robots" content="noindex">` : '',
       ].join('\n  ');
     } else {
-      state = { status: doc ? 'archived' : store.isRetired(code) ? 'retired' : 'missing', doc: doc ? { title: doc.title, code: doc.code } : null, others };
+      state = { status: doc ? 'archived' : store.isRetired(code) ? 'retired' : 'missing', doc: doc ? { title: doc.title, code: doc.code } : null, others, menu };
       meta = `<title>${esc(SITE.company?.short || 'Jinharsh')}</title>\n  <meta name="robots" content="noindex">`;
     }
     const data = JSON.stringify({ ...state, site: SITE, publicUrl: B, printable: PRINTABLE }).replace(/</g, '\\u003c');
@@ -320,6 +369,33 @@ export async function createApp(overrides = {}) {
     }
     if (parts[1] === 'logout' && m === 'POST') return send(res, 200, { ok: true }, { 'Set-Cookie': Auth.clearCookie(SECURE(req)) });
 
+    // public: what visitors do (a visit to a catalogue also counts as a scan, as before)
+    if (parts[1] === 'track' && m === 'POST') {
+      if (tooMany(req, 'track', 120, 60000)) req.resume();
+      else { let b = {}; try { b = await readJsonBody(req, 8192); } catch {} recordEvent(req, b); }
+      res.writeHead(204, { 'Cache-Control': 'no-store' }); return res.end();
+    }
+    // public: a visitor's question about a product. Saved here, and a copy goes to the company's Odoo bridge if set.
+    if (parts[1] === 'inquiry' && m === 'POST') {
+      if (tooMany(req, 'inquiry', 6, 10 * 60000)) { req.resume(); return fail(res, 429, 'Too many messages from here. Please try again in a few minutes, or call us.'); }
+      let b;
+      try { b = await readJsonBody(req, 16384); } catch { return fail(res, 400, 'The message could not be read.'); }
+      if (b.website) return send(res, 201, { ok: true }); // the hidden field only robots fill in
+      const v = cleanVisitor(b) || {};
+      const message = clip(b.message, 2000);
+      if (!v.name || (!v.email && !v.phone)) return fail(res, 400, 'Please give your name and an email address or phone number.');
+      const doc = b.code ? store.get(String(b.code)) : null;
+      const t = istParts(), place = placeOf(req);
+      const q = { id: newId(), at: new Date().toISOString(), time: t.time, day: t.day, phase: phaseOf(exhibition(), t.day),
+        name: v.name, email: v.email || '', phone: v.phone || '', company: v.company || '', message,
+        code: doc ? doc.code : '', title: doc ? doc.title : '', brand: doc ? doc.brand || '' : '',
+        device: cleanDevice(b.device), source: cleanSource(b.source), city: place.city, country: place.country };
+      await activity.addInquiry(q);
+      recordEvent(req, { type: 'query', code: q.code, device: b.device, source: b.source, visitor: v });
+      forwardInquiry(q);
+      return send(res, 201, { ok: true });
+    }
+
     // public: count one scan (sent by the scan page after it opens; link previews by chat apps don't run it)
     if (parts[1] === 'p' && parts[2] && parts[3] === 'scan' && m === 'POST') {
       const doc = store.get(parts[2]);
@@ -328,9 +404,44 @@ export async function createApp(overrides = {}) {
     }
 
     // ---- below: the team's own screens ----
-    if (!['check-code', 'docs', 'blob-upload'].includes(parts[1])) return fail(res, 404, 'Unknown address');
+    if (!['check-code', 'docs', 'blob-upload', 'insights', 'settings'].includes(parts[1])) return fail(res, 404, 'Unknown address');
     if (!isTeam(req)) { req.resume(); return fail(res, 401, 'Please sign in.'); }
     if (!storageReady()) { req.resume(); return fail(res, 503, 'The trial copy has no file storage connected yet. In Vercel: project → Storage → connect a Blob store, then redeploy.'); }
+
+    // the team's visitor numbers, the queries, and the Excel (CSV) copies of both
+    if (parts[1] === 'insights' && m === 'GET') {
+      const [all, inquiries] = await Promise.all([activity.events(), activity.inquiries()]);
+      const events = all.filter((e) => !e.team);
+      const stamp = istParts().day;
+      if (parts[2] === 'visits.csv') {
+        return send(res, 200, toCsv(events, [['Time (India)', (e) => e.time], ['What', (e) => e.type], ['Catalogue', (e) => e.title], ['Brand', (e) => e.brand],
+          ['Exhibition', (e) => e.phase], ['Device', (e) => e.device], ['Came from', (e) => e.source], ['Place', (e) => [e.city, e.country].filter(Boolean).join(', ')],
+          ['Name', (e) => e.visitor?.name], ['Email', (e) => e.visitor?.email], ['Company', (e) => e.visitor?.company], ['Phone', (e) => e.visitor?.phone]]),
+        { 'Content-Type': 'text/csv; charset=utf-8', 'Content-Disposition': `attachment; filename="catalogue-visits-${stamp}.csv"` });
+      }
+      if (parts[2] === 'queries.csv') {
+        return send(res, 200, toCsv(inquiries, [['Time (India)', (q) => q.time], ['Name', (q) => q.name], ['Company', (q) => q.company], ['Email', (q) => q.email],
+          ['Phone', (q) => q.phone], ['Catalogue', (q) => q.title], ['Brand', (q) => q.brand], ['Message', (q) => q.message], ['Exhibition', (q) => q.phase],
+          ['Device', (q) => q.device], ['Came from', (q) => q.source], ['Place', (q) => [q.city, q.country].filter(Boolean).join(', ')]]),
+        { 'Content-Type': 'text/csv; charset=utf-8', 'Content-Disposition': `attachment; filename="catalogue-queries-${stamp}.csv"` });
+      }
+      return send(res, 200, { summary: summarise(events, inquiries, store.list(), exhibition()), events: events.slice(0, 300), inquiries: inquiries.slice(0, 500),
+        exhibition: exhibition(), keepsVisits: !BLOB, forwards: !!INQUIRY_FORWARD });
+    }
+    // the exhibition: its name and first and last day (visits are then marked before / during / after)
+    if (parts[1] === 'settings' && m === 'PUT') {
+      const b = await readJsonBody(req);
+      const e = b.exhibition || {};
+      const okDay = (d) => /^\d{4}-\d{2}-\d{2}$/.test(String(d || ''));
+      let ex = null;
+      if (e.name || e.start || e.end) {
+        if (!okDay(e.start) || !okDay(e.end) || e.start > e.end) return fail(res, 400, 'Please give the first and last day of the exhibition (the last day can\'t be before the first).');
+        ex = { name: clip(e.name, 80) || 'Exhibition', start: e.start, end: e.end };
+      }
+      store.db.settings = { ...(store.db.settings || {}), exhibition: ex };
+      await store.save();
+      return send(res, 200, { exhibition: ex });
+    }
 
     if (parts[1] === 'check-code' && m === 'GET') {
       if (q.has('suggest')) return send(res, 200, { ok: true, code: store.newCode() });

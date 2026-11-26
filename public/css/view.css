@@ -197,3 +197,71 @@ html.lite:not(.dark) .reader-ov { background: rgba(238, 238, 242, .98); }
 @keyframes c-pop { 0% { transform: scale(1); } 35% { transform: scale(1.28) rotate(-8deg); } 65% { transform: scale(.92) rotate(3deg); } 100% { transform: scale(1); } }
 @keyframes c-send { 0% { transform: none; opacity: 1; } 45% { transform: translate(14px, -10px) scale(.7); opacity: 0; } 46% { transform: translate(-14px, 8px) scale(.7); opacity: 0; } 100% { transform: none; opacity: 1; } }
 @keyframes c-spin { from { transform: rotate(0); } to { transform: rotate(360deg); } }
+
+/* ---------- "Ask about price, stock or delivery" under the buttons, and the query button in the contact card ---------- */
+.ask-link { display: inline-flex; align-items: center; gap: 7px; margin-top: 14px; padding: 6px 2px; border: 0; background: none; color: var(--accent);
+  font: inherit; font-weight: 650; font-size: 14.5px; cursor: pointer; border-radius: 8px; }
+.ask-link .i { width: 17px; height: 17px; }
+.ask-link .i:last-child { width: 15px; height: 15px; transition: transform .3s var(--sp-smooth, ease); }
+.ask-link:hover .i:last-child { transform: translateX(3px); }
+.contact-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 14px; flex-wrap: wrap; }
+.contact-head > div { min-width: 0; flex: 1 1 280px; }
+.contact-head .ju-btn { flex: none; }
+@media (max-width: 720px) { .ask-link { margin-left: auto; margin-right: auto; display: flex; } }
+
+/* ---------- Watch & learn: product videos, installation videos, trials & recommendations ---------- */
+.media-sec { margin: 30px 0 6px; display: grid; gap: 26px; }
+.md-group h2 { display: flex; align-items: center; gap: 10px; margin: 0 0 14px; font-size: 22px; letter-spacing: -.025em; }
+.md-group h2 .i { width: 22px; height: 22px; color: var(--accent); }
+.md-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 14px; }
+.md-card { display: flex; flex-direction: column; border-radius: 18px; overflow: hidden; background: var(--card); color: var(--text); text-decoration: none;
+  box-shadow: 0 0 0 1px var(--line); transition: transform .35s var(--sp-smooth, ease), box-shadow .3s; }
+.md-pic { position: relative; aspect-ratio: 16 / 9; background: var(--hover); display: grid; place-items: center; overflow: hidden; }
+.md-pic img { width: 100%; height: 100%; object-fit: cover; display: block; transition: transform .5s var(--sp-smooth, ease); }
+.md-ic .i { width: 34px; height: 34px; color: var(--accent); }
+.md-play { position: absolute; width: 54px; height: 54px; border-radius: 50%; display: grid; place-items: center; background: rgba(255, 255, 255, .92); color: #141416;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, .25); transition: transform .35s var(--sp-bouncy, ease); }
+.md-play .i { width: 22px; height: 22px; margin-left: 3px; fill: currentColor; }
+.md-text { padding: 12px 14px 14px; display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.md-text b { font-weight: 650; line-height: 1.3; }
+.md-text small { color: var(--muted); font-size: 12.5px; }
+@media (hover: hover) {
+  .md-card:hover { transform: translateY(-3px); box-shadow: 0 0 0 1px var(--line), 0 18px 36px -18px rgba(20, 22, 28, .35); }
+  .md-card:hover .md-pic img { transform: scale(1.04); }
+  .md-card:hover .md-play { transform: scale(1.1); }
+}
+/* the video window */
+.video-ov { z-index: 140; }
+.video-box { position: relative; width: min(960px, 100%); }
+.video-box .close-x { position: absolute; top: -48px; right: 0; background: rgba(255, 255, 255, .14); color: #fff; }
+.video-frame { aspect-ratio: 16 / 9; border-radius: 16px; overflow: hidden; background: #000; box-shadow: 0 30px 80px -20px rgba(0, 0, 0, .7); }
+.video-frame iframe { width: 100%; height: 100%; border: 0; display: block; }
+
+/* ---------- the menu of all catalogues (slides in from the left) ---------- */
+#menuTop { margin-left: -6px; }
+.drawer-ov { position: fixed; inset: 0; z-index: 60; background: rgba(12, 12, 14, .42); }
+html.lite .drawer-ov { background: rgba(12, 12, 14, .6); }
+.cat-drawer { position: absolute; top: 0; bottom: 0; left: 0; width: min(380px, 92vw); display: flex; flex-direction: column; gap: 12px;
+  padding: calc(14px + env(safe-area-inset-top)) 14px 14px; background: var(--card); box-shadow: 0 0 0 1px var(--line), 24px 0 60px -20px rgba(0, 0, 0, .45); }
+.cd-head { display: flex; align-items: center; gap: 8px; }
+.cd-all { display: flex; align-items: center; gap: 10px; text-decoration: none; color: var(--text); margin-right: auto; padding: 4px 6px; border-radius: 12px; }
+.cd-all > .i { width: 22px; height: 22px; color: var(--accent); }
+.cd-all span { display: flex; flex-direction: column; }
+.cd-all small { color: var(--muted); font-size: 12px; }
+.cd-all:hover { background: var(--hover); }
+.cd-chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.cd-chips .ju-chip { height: 30px; padding: 0 11px; font-size: 12.5px; }
+.cd-list { flex: 1; overflow-y: auto; margin: 0 -6px; padding: 0 6px 8px; display: flex; flex-direction: column; gap: 4px; overscroll-behavior: contain; }
+.cd-item { display: flex; align-items: center; gap: 12px; padding: 8px; border-radius: 14px; text-decoration: none; color: var(--text); transition: background-color .15s; }
+.cd-item:hover { background: var(--hover); }
+.cd-item.here { background: var(--accent-soft); }
+.cd-thumb { width: 42px; height: 56px; flex: none; border-radius: 6px; overflow: hidden; background: var(--bg); display: grid; place-items: center; box-shadow: 0 0 0 1px var(--line); }
+.cd-thumb img { width: 100%; height: 100%; object-fit: cover; object-position: top; display: block; }
+.cd-thumb .i { width: 18px; height: 18px; color: var(--muted); }
+.cd-text { display: flex; flex-direction: column; min-width: 0; }
+.cd-text small { font-size: 10.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--accent); }
+.cd-text b { font-size: 13.5px; font-weight: 650; line-height: 1.3; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.cd-text em { font-style: normal; font-size: 11.5px; color: var(--muted); }
+.cd-item.here em { color: var(--accent); font-weight: 650; }
+.cd-none { padding: 20px 8px; text-align: center; }
+.cat-drawer .searchbox { flex: none; }

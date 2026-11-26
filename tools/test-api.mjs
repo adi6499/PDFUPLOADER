@@ -1,7 +1,7 @@
 // End-to-end check of the promises this site makes. Starts its own server on a spare port with an
 // empty, throw-away data folder, so your real documents are never touched.   Run:  npm test
 import { spawn, execFileSync } from 'node:child_process';
-import { mkdtempSync, rmSync } from 'node:fs';
+import { mkdtempSync, rmSync, mkdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -35,7 +35,11 @@ function tinyPdf(word) {
 
 await writeAuth(data, 'test-pass-123');
 // bring the old hub's catalogues across, the way the company server will (npm run import-hub)
-const imported = execFileSync(process.execPath, [join(root, 'tools', 'import-hub.mjs')], { env: { ...process.env, DATA_DIR: data, PORT: String(PORT), HOST: '127.0.0.1' } }).toString();
+// (the hub's own PDFs sit in a folder on the server; here a pretend one holds the master catalogue)
+const hubPdfs = join(data, 'hub-pdfs');
+mkdirSync(hubPdfs, { recursive: true });
+writeFileSync(join(hubPdfs, 'jinharsh-master-catalog.pdf'), tinyPdf('master'));
+const imported = execFileSync(process.execPath, [join(root, 'tools', 'import-hub.mjs'), '--pdfs', hubPdfs], { env: { ...process.env, DATA_DIR: data, PORT: String(PORT), HOST: '127.0.0.1' } }).toString();
 const srv = spawn(process.execPath, [join(root, 'server', 'server.mjs')], {
   env: { ...process.env, PORT: String(PORT), HOST: '127.0.0.1', DATA_DIR: data, PUBLIC_URL: 'https://docs.example.com', TEAM_OPEN: 'false', TRIAL: 'false', STORAGE: 'disk' },
   stdio: ['ignore', 'pipe', 'inherit'],
@@ -119,6 +123,44 @@ try {
   r = await j(await T(`/api/docs/catalogue`));
   ok(r.body.scans === 2, 'opens are counted');
 
+  console.log('Visitors and queries (sales)');
+  const post = (path, body) => fetch(`${BASE}${path}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+  await post('/api/track', { type: 'visit', code: 'catalogue', device: 'phone', source: 'whatsapp' });
+  await post('/api/track', { type: 'download', code: 'catalogue', device: 'phone', visitor: { name: 'Ravi', email: 'ravi@example.com', company: 'Steel Co' } });
+  await post('/api/track', { type: 'hub', device: 'computer' });
+  await post('/api/track', { type: 'nonsense', code: 'catalogue' });
+  await post('/api/track', { type: 'visit', code: 'no-such-thing' });
+  r = await j(await T(`/api/docs/catalogue`));
+  ok(r.body.scans === 3, 'a visit sent with the visitor details still counts as a scan');
+  r = await j(await post('/api/inquiry', { name: 'Ravi', message: 'Price for 22220?' }));
+  ok(r.status === 400, 'a query needs a name and an email or phone number');
+  r = await j(await post('/api/inquiry', { name: 'Ravi', phone: '+91 98200 00000', company: 'Steel Co', message: 'Price for 22220 EJ?', code: 'catalogue', device: 'phone' }));
+  ok(r.status === 201, 'a visitor can send a query about a catalogue');
+  r = await j(await post('/api/inquiry', { name: 'Bot', email: 'bot@example.com', message: 'spam', website: 'http://spam' }));
+  ok(r.status === 201, 'robots filling the hidden field get a polite "thanks"…');
+  r = await j(await fetch(`${BASE}/api/insights`));
+  ok(r.status === 401, 'visitor numbers and queries are for the team only');
+  r = await j(await T(`/api/insights`));
+  const s = r.body?.summary;
+  ok(r.status === 200 && s.totals.visits === 2 && s.totals.downloads === 1 && s.totals.queries === 1, 'the team sees visits, downloads and queries (…but the robot\'s message is not saved)');
+  ok(s.totals.people === 2 && s.catalogues[0]?.code === 'catalogue' && s.catalogues[0].download === 1, 'known visitors and each catalogue\'s numbers are counted');
+  ok(r.body.inquiries[0]?.phone === '+91 98200 00000' && r.body.inquiries[0]?.title === 'Test Catalogue', 'the query keeps the phone number and which catalogue it was about');
+  const csv = await T(`/api/insights/queries.csv`);
+  const csvBytes = new Uint8Array(await csv.arrayBuffer());
+  const csvText = new TextDecoder().decode(csvBytes);
+  ok(csv.headers.get('content-type').startsWith('text/csv') && csvBytes[0] === 0xef && csvBytes[1] === 0xbb && csvBytes[2] === 0xbf && csvText.includes('Price for 22220 EJ?'), 'queries download as a CSV that Excel opens correctly');
+  r = await j(await T(`/api/settings`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ exhibition: { name: 'IMTEX', start: '2026-12-01', end: '2026-11-01' } }) }));
+  ok(r.status === 400, 'an exhibition cannot end before it starts');
+  r = await j(await T(`/api/settings`, { method: 'PUT', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ exhibition: { name: 'IMTEX', start: '2026-01-01', end: '2026-01-05' } }) }));
+  await post('/api/track', { type: 'visit', code: 'catalogue' });
+  r = await j(await T(`/api/insights`));
+  ok(r.body.exhibition?.name === 'IMTEX' && r.body.summary.phases?.after === 1, 'with exhibition dates, visits are marked before / during / after');
+  r = await j(await T(`/api/docs/catalogue`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ media: [
+    { kind: 'video', title: 'How it works', url: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ' }, { kind: 'trial', title: 'Trial at a steel plant', url: 'javascript:alert(1)' }] }) }));
+  ok(r.body.media?.length === 1 && r.body.media[0].kind === 'video', 'videos can be added to a catalogue (unsafe links are dropped)');
+  html = await (await fetch(`${BASE}/c/catalogue`)).text();
+  ok(html.includes('How it works') && html.includes('"menu":['), 'the catalogue page carries its videos and the menu of all catalogues');
+
   console.log('Archive and delete');
   r = await j(await T(`/api/docs/catalogue`, { method: 'DELETE' }));
   ok(r.status === 409, 'a live document cannot be deleted by mistake (archive first)');
@@ -136,7 +178,11 @@ try {
   ok((await fetch(`${BASE}/c/nothing-here`)).status === 404, 'an unknown code shows the "nothing linked" page');
 
   console.log('The old catalog.jinharsh.com hub');
-  ok(/10 catalogue\(s\) added/.test(imported), 'npm run import-hub brought across all 10 hub catalogues');
+  ok(/15 catalogue\(s\) added/.test(imported), 'npm run import-hub brought across Mitul\'s 12 hub catalogues and the 3 older links');
+  let mc = await j(await T('/api/docs/jinharsh-master-catalog'));
+  ok(mc.status === 200 && mc.body.versions.length === 1 && !mc.body.live.waiting, 'a hub PDF found in the --pdfs folder goes live straight away');
+  html = await (await fetch(`${BASE}/c/rexnord-colour-coating`)).text();
+  ok(html.includes('"sourceUrl":"https://colourcoating.rexnord.co.in/"') && html.includes('"link":true'), 'an interactive guide (a website, not a PDF) is kept as a link and marked in the menu');
   let red = await fetch(`${BASE}/?cat=Timken-SRB`, { redirect: 'manual' });
   ok(red.status === 302 && red.headers.get('location') === '/c/timken-srb', 'old hub links (/?cat=timken-srb) go to the same catalogue');
   let w = await j(await T('/api/docs/timken-srb'));
@@ -146,7 +192,7 @@ try {
   ok(html.includes('"status":"waiting"') && html.includes('timken.com'), 'its page works now and offers the maker\'s own copy');
   red = await fetch(`${BASE}/f/timken-srb/latest`, { redirect: 'manual' });
   ok(red.status === 302 && red.headers.get('location').includes('timken.com'), 'its "newest file" link goes to the maker\'s copy until ours is uploaded');
-  html = await (await fetch(`${BASE}/c/groz-lubrication-tools`)).text();
+  html = await (await fetch(`${BASE}/c/drager-safety`)).text();
   ok(html.includes('"status":"waiting"') && !html.includes('"sourceUrl":"http'), 'a hub catalogue with no PDF anywhere shows "coming soon"');
   let cats = await j(await fetch(`${BASE}/api/catalogs`));
   ok(cats.status === 200 && cats.body.catalogs.some((c) => c.code === 'timken-srb' && c.waiting) && !cats.body.catalogs.some((c) => c.status === 'archived'), 'the public list has every live catalogue, none archived');

@@ -1,6 +1,15 @@
 {
-  "from": "https://catalog.jinharsh.com/hub/catalogs.json (copied 25 Nov 2026)",
+  "from": "https://github.com/mitulv4u/jinharsh-subsites sites/catalog.jinharsh.com/catalogs.json (Mitul, 26 Nov 2026) + 3 older links from the first hub",
+  "howTo": "node tools/import-hub.mjs [this file] [--pdfs <folder with the hub PDFs>]  (pdfFile entries are uploaded from that folder)",
   "catalogs": [
+    {
+      "id": "jinharsh-master-catalog",
+      "brand": "JinHarsh",
+      "category": "Master Catalog",
+      "title": "JinHarsh 2025–26 Master Industrial Product Guide (14 Divisions)",
+      "description": "Complete JinHarsh Industrial Solutions catalog covering Bearings, Couplings, Motors, Shell Lubricants, Groz Tools, Dräger Safety & Flexco.",
+      "pdfFile": "jinharsh-master-catalog.pdf"
+    },
     {
       "id": "timken-srb",
       "brand": "Timken",
@@ -18,61 +27,101 @@
       "sourceUrl": "https://www.lovejoy-inc.com/wp-content/uploads/2019/02/QF-Brochure.pdf"
     },
     {
-      "id": "lovejoy-qf-interchange",
-      "brand": "Timken Lovejoy",
-      "category": "Couplings",
-      "title": "Lovejoy QF vs. Elasto-Chain Interchange Guide",
-      "description": "Direct part-number cross-reference chart for plant maintenance and OEM replacements.",
-      "sourceUrl": "https://www.lovejoy-inc.com/wp-content/uploads/2019/02/QF-Interchange-Guide-for-Elasto-Chain.pdf"
-    },
-    {
       "id": "rexnord-omega-viva",
       "brand": "Regal Rexnord",
       "category": "Couplings",
-      "title": "Rexnord Omega & Viva Elastomer Couplings",
-      "description": "Split-element elastomer couplings for pumps, compressors (Kaeser spares), and cooling towers."
+      "title": "Rexnord Omega Metric Elastomer Couplings Catalog",
+      "description": "Split-element elastomer couplings for pumps, compressors (Kaeser spares), and cooling towers.",
+      "sourceUrl": "https://omega.rexnord.co.in/docs/omega-metric-catalog.pdf"
     },
     {
-      "id": "rexnord-colour-coating",
+      "id": "rexnord-omega-imperial",
       "brand": "Regal Rexnord",
-      "category": "Bearings & Housed Units",
-      "title": "Steel Colour Coating Line Bearings (CB224M60H – FCB224M100H)",
-      "description": "Heavy-duty Rexnord Link-Belt spherical roller housed units for steel coil colour coating lines."
-    },
-    {
-      "id": "timken-borewell-rigs",
-      "brand": "Timken",
-      "category": "Application Hub",
-      "title": "Borewell Drilling Rig Bearings & Drive Components",
-      "description": "Tapered, spherical, and thrust bearings engineered for rotary head & rig gearboxes."
+      "category": "Couplings",
+      "title": "Rexnord Omega Imperial 4000 Series Catalog",
+      "description": "Imperial bore & spacer configurations for heavy-duty rotating equipment and industrial drives.",
+      "sourceUrl": "https://omega.rexnord.co.in/docs/omega-imperial-4000.pdf"
     },
     {
       "id": "groz-lubrication-tools",
       "brand": "Groz",
       "category": "Lubrication & Tools",
-      "title": "Groz Industrial Lubrication, Lube Rooms & Tools Catalog",
-      "description": "Grease guns, electric pumps, hose reels, DEF handling, gear pullers, and workshop tools."
+      "title": "Groz Industrial Lubrication Equipments Catalog",
+      "description": "Grease guns, electric & pneumatic pumps, hose reels, DEF handling, and workshop lubrication tools.",
+      "sourceUrl": "https://groz.tools/groz-lubrication-equipments.pdf"
     },
     {
-      "id": "abb-baldor-motors",
-      "brand": "ABB & Baldor",
-      "category": "Motors & Drives",
-      "title": "ABB Industrial / EV Motors, Drives & Smart Sensors",
-      "description": "HT & LV motors, Baldor cooling tower drives, and condition monitoring sensors."
+      "id": "groz-fluid-handling",
+      "brand": "Groz",
+      "category": "Lubrication & Tools",
+      "title": "Groz Fluid Handling & Metering Catalog",
+      "description": "Industrial fuel & oil transfer pumps, digital meters, drum equipment, and fluid management.",
+      "sourceUrl": "https://groz.tools/Fluid_Handling_Catalogue_spread.pdf"
     },
     {
-      "id": "drager-safety",
-      "brand": "Dräger",
-      "category": "Safety & Gas Detection",
-      "title": "Dräger Portable & Fixed Gas Detection Solutions",
-      "description": "Authorized industrial safety, gas monitors, and breathing apparatus overview."
+      "id": "groz-lighting",
+      "brand": "Groz",
+      "category": "Lighting & Tools",
+      "title": "Groz Industrial LED Worklights & Floodlights",
+      "description": "Rechargeable LED inspection lights, headlamps, and heavy-duty industrial floodlights.",
+      "sourceUrl": "https://groz.tools/GROZ_LIGHTING_GL-10_1.pdf"
+    },
+    {
+      "id": "shell-lubricants",
+      "brand": "Shell",
+      "category": "Industrial Lubricants",
+      "title": "Shell Industrial Lubricants & Greases Flyer",
+      "description": "Shell Omala gear oils, Tellus hydraulic fluids, Gadus greases, Corena compressor oils, and Tonna.",
+      "pdfFile": "shell-lubricants-flyer.pdf"
     },
     {
       "id": "flexco-conveying",
       "brand": "Flexco",
       "category": "Conveying Equipment",
       "title": "Flexco Belt Fasteners, Cleaners & Skirting Systems",
-      "description": "Complete conveyor belt maintenance, splices, and bulk material handling solutions."
+      "description": "Complete conveyor belt maintenance, mechanical splices, trackers, and bulk material handling solutions.",
+      "pdfFile": "flexco-conveying-catalog.pdf"
+    },
+    {
+      "id": "rexnord-colour-coating",
+      "brand": "Regal Rexnord",
+      "category": "Application Hub",
+      "title": "Steel Colour Coating Line Bearings (CB224M60H – FCB224M100H)",
+      "description": "Interactive process-flow bearing guide for continuous steel coil colour coating lines.",
+      "sourceUrl": "https://colourcoating.rexnord.co.in/"
+    },
+    {
+      "id": "timken-borewell-rigs",
+      "brand": "Timken",
+      "category": "Application Hub",
+      "title": "Borewell Drilling Rig Bearings & Drive Components",
+      "description": "Tapered, spherical, and thrust bearings engineered for rotary head & rig gearboxes.",
+      "sourceUrl": "https://borewell.jinharsh.com/"
+    },
+    {
+      "id": "lovejoy-qf-interchange",
+      "brand": "Timken Lovejoy",
+      "category": "Couplings",
+      "title": "Lovejoy QF vs. Elasto-Chain Interchange Guide",
+      "description": "Direct part-number cross-reference chart for plant maintenance and OEM replacements.",
+      "sourceUrl": "https://www.lovejoy-inc.com/wp-content/uploads/2019/02/QF-Interchange-Guide-for-Elasto-Chain.pdf",
+      "note": "From the first catalogue hub: kept so QR codes printed with this link keep working."
+    },
+    {
+      "id": "abb-baldor-motors",
+      "brand": "ABB & Baldor",
+      "category": "Motors & Drives",
+      "title": "ABB Industrial / EV Motors, Drives & Smart Sensors",
+      "description": "HT & LV motors, Baldor cooling tower drives, and condition monitoring sensors.",
+      "note": "From the first catalogue hub: kept so QR codes printed with this link keep working."
+    },
+    {
+      "id": "drager-safety",
+      "brand": "Dräger",
+      "category": "Safety & Gas Detection",
+      "title": "Dräger Portable & Fixed Gas Detection Solutions",
+      "description": "Authorized industrial safety, gas monitors, and breathing apparatus overview.",
+      "note": "From the first catalogue hub: kept so QR codes printed with this link keep working."
     }
   ]
 }

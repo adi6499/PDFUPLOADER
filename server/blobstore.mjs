@@ -35,7 +35,7 @@ export class BlobStore extends Store {
       const r = await this.fetch(blobs[0].url, { cache: 'no-store' });
       if (!r.ok) throw new Error('Could not read the document list (' + r.status + ')');
       const raw = await r.json();
-      this.db = { docs: Array.isArray(raw.docs) ? raw.docs : [], retired: Array.isArray(raw.retired) ? raw.retired : [] };
+      this.db = { ...raw, docs: Array.isArray(raw.docs) ? raw.docs : [], retired: Array.isArray(raw.retired) ? raw.retired : [] };
       this.dbName = blobs[0].pathname;
     }
     this.readAt = Date.now();

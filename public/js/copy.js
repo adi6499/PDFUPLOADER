@@ -3,7 +3,7 @@
 //                     the modern clipboard is switched off by the browser: an old-style copy is used there.
 //   showCopied(btn)   the button's icon becomes a tick that draws itself and its words roll to "Copied", then back.
 //   flashLink(el)     the link text glows orange for a moment, as if picked up.
-import { icon } from '/vendor/icons.js';
+import { icon } from '/vendor/icons.js?v=2';
 import * as M from './motion.js';
 
 export async function copyText(text) {

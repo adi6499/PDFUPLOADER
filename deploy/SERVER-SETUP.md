@@ -49,20 +49,30 @@ cp deploy/config.local.example.json config.local.json
   "dataDir": "/www/jinharsh-catalogues-data",
   "host": "127.0.0.1",
   "port": 8180,
-  "trustProxy": true
+  "trustProxy": true,
+  "inquiryForward": "https://api.jinharsh.com/inquiries"
 }
 ```
 `publicUrl` is the address inside every QR code. Set it once. Never change it after cards are printed.
+`inquiryForward` sends a copy of every visitor query ("Send a query" on the catalogue pages) to the company's Odoo
+bridge, with the same fields Mitul's hub sends. Leave it out to keep queries only on this server. Either way the team
+sees every query under **Visitors & queries** on the team page, with Excel (CSV) downloads.
 
 ## 5. Bring the old hub's catalogues across (once, before the first start)
 
 ```bash
-npm run import-hub
+npm run import-hub -- --pdfs /www/wwwroot/catalog.jinharsh.com/hub/pdfs
 ```
-It adds the 10 catalogues from `deploy/hub-catalogs.json` with the same names (`timken-srb`, `groz-lubrication-tools`, ...).
-Each shows "waiting for its PDF" until the team uploads it; the three that linked to Timken / Lovejoy's own PDFs
-keep offering those until then. (If someone added more entries to the server's `hub/catalogs.json` since 25 Nov 2026,
-run `npm run import-hub -- /www/wwwroot/catalog.jinharsh.com/hub/catalogs.json` as well: existing names are skipped.)
+It adds the 15 catalogues from `deploy/hub-catalogs.json` with the SAME names, so every QR printed from Mitul's hub
+(`catalog.jinharsh.com/?cat=<name>`) keeps opening the right catalogue: Mitul's 12 (26 Nov 2026) plus 3 older links
+from the first hub (`abb-baldor-motors`, `drager-safety`, `lovejoy-qf-interchange`).
+- The hub's own PDFs (master catalogue, Shell, Flexco) are taken from `hub/pdfs` and go live at once; their cover
+  pictures are made the first time someone opens the team page.
+- Catalogues that link to a maker's PDF (Timken, Lovejoy, Rexnord Omega, Groz) keep offering it until the team uploads ours.
+- The colour-coating and borewell guides are websites, not PDFs: their pages offer "Open the interactive guide".
+- PDFs uploaded through Mitul's team page sit in `hub/data/custom-catalogs.json` + `hub/pdfs`; upload those again on
+  our team page (none existed on 26 Nov 2026).
+Running it again is safe: names already there are skipped.
 
 ## 6. Start it (keeps running, restarts by itself after a reboot)
 

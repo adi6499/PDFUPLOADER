@@ -1,10 +1,13 @@
 // A catalogue's own page: what a scanned QR code opens. The server puts the catalogue's details into the page
 // itself (id="boot"), so the cover and title show at once; the PDF pages are then drawn as they come near the screen.
-import { icon } from '/vendor/icons.js';
+import { icon } from '/vendor/icons.js?v=2';
 import { pdfjs, PDF_OPTS, fmtSize } from './pdfkit.js';
 import * as M from './motion.js';
 import { esc, ui, contactHtml, shareSheet, qrSheet, blankCover, idle, warmModule } from './site.js';
 import { bindImage, swallow, formPage, perf } from './particles.js';
+import { track, needsDetails, beforeDownload } from './visitor.js';
+import { mediaHtml as renderMedia, wireMedia } from './media.js';
+import { openMenu } from './catmenu.js';
 
 const $ = (s, el = document) => el.querySelector(s);
 
@@ -16,8 +19,18 @@ const app = $('#app');
 const preview = new URLSearchParams(location.search).has('preview');
 const PUBLIC = (BOOT.publicUrl || location.origin).replace(/\/$/, '');
 const linkOf = (code) => `${PUBLIC}/c/${code}`;
+// product videos, installation videos, trials & recommendations (added by the team under Edit details)
+const mediaHtml = () => renderMedia(D && D.media, D && D.code);
+wireMedia();
 
 ui(() => { $('#brand b').textContent = SITE.company?.short || 'Jinharsh'; $('#brand small').textContent = 'Catalogues'; });
+// the menu of every catalogue, from the top bar
+ui(() => {
+  const b = $('#menuTop');
+  if (!(BOOT.menu || []).length) { b.hidden = true; return; }
+  b.innerHTML = icon('menu');
+  b.addEventListener('click', () => openMenu({ list: BOOT.menu, current: D ? D.code : '', from: b }));
+});
 
 // the other catalogues, under every page (like the menu of the old catalogue hub)
 function othersHtml() {
@@ -33,7 +46,7 @@ function othersHtml() {
 }
 
 function wireCommon(title, link) {
-  const extra = { site: SITE, printable: BOOT.printable !== false };
+  const extra = { site: SITE, printable: BOOT.printable !== false, code: D ? D.code : '' };
   ui(() => { const s = $('#shareTop'); s.hidden = false; s.innerHTML = icon('share-2'); s.addEventListener('click', (e) => shareSheet({ link, title, from: e.currentTarget, ...extra })); });
   ui(() => $('#shareBtn').addEventListener('click', (e) => { M.bump(e.currentTarget.querySelector('.i'), 1.25); shareSheet({ link, title, from: e.currentTarget, ...extra }); }));
   ui(() => $('#qrBtn').addEventListener('click', () => qrSheet({ link, title })));
@@ -47,7 +60,7 @@ if (!D || (BOOT.status !== 'live' && BOOT.status !== 'waiting')) {
     missing: ['Nothing is linked to this code', 'Please check the link, or have a look at all our catalogues.'],
   }[BOOT.status] || ['Something went wrong', 'Please try again in a moment.'];
   app.innerHTML = `<div class="ju-enter"><section class="ju-card gone"><div class="art">${icon('circle-alert')}</div><h1>${t[0]}</h1><p>${t[1]}</p>
-    <p style="margin-top:18px"><a class="ju-btn primary" href="/">${icon('book-open')}See all catalogues</a></p></section>${othersHtml()}${contactHtml(SITE, BOOT.doc?.title)}</div>`;
+    <p style="margin-top:18px"><a class="ju-btn primary" href="/">${icon('book-open')}See all catalogues</a></p></section>${othersHtml()}${contactHtml(SITE, BOOT.doc?.title, BOOT.doc?.code)}</div>`;
 } else if (BOOT.status === 'waiting') {
   showWaiting();
 } else {
@@ -58,6 +71,8 @@ if (!D || (BOOT.status !== 'live' && BOOT.status !== 'waiting')) {
 function showWaiting() {
   let host = '';
   try { host = D.sourceUrl ? new URL(D.sourceUrl).hostname.replace(/^www\./, '') : ''; } catch {}
+  // a link to an interactive guide (a website, not a PDF), like the colour-coating line or the borewell rig guides
+  const portal = D.sourceUrl && !/\.pdf(\?|#|$)/i.test(D.sourceUrl);
   app.innerHTML = `
     <section class="v-hero">
       <div class="v-cover">${blankCover(D, 'big')}</div>
@@ -66,15 +81,18 @@ function showWaiting() {
         <h1>${esc(D.title)}</h1>
         <p class="sub">${D.note ? esc(D.note) : ''}</p>
         <div class="v-actions">
-          ${D.sourceUrl ? `<a class="ju-btn accent" href="${esc(D.sourceUrl)}" target="_blank" rel="noopener">${icon('external-link')}Open the PDF (${esc(host)})</a>` : `<span class="ju-pill warn soon">Coming soon: ask us for a copy</span>`}
+          ${D.sourceUrl ? `<a class="ju-btn accent" href="${esc(D.sourceUrl)}" target="_blank" rel="noopener" id="srcBtn">${icon('external-link')}${portal ? 'Open the interactive guide' : `Open the PDF (${esc(host)})`}</a>` : `<button class="ju-btn accent" type="button" data-ask data-code="${esc(D.code)}" data-title="${esc(D.title)}" data-message="Please send me a copy of this catalogue.">${icon('message-square-text')}Ask us for a copy</button>`}
           <button class="ju-btn" type="button" id="shareBtn">${icon('share-2')}Share</button>
           <button class="ju-btn" type="button" id="qrBtn">${icon('qr-code')}QR code</button>
         </div>
       </div>
     </section>
+    ${mediaHtml()}
     ${othersHtml()}
-    ${contactHtml(SITE, D.title)}`;
+    ${contactHtml(SITE, D.title, D.code)}`;
   wireCommon(D.title, linkOf(D.code));
+  ui(() => $('#srcBtn').addEventListener('click', () => track(portal ? 'read' : 'download', D.code)));
+  countVisit();
 }
 
 // ---------- the catalogue ----------
@@ -98,10 +116,12 @@ function showDoc() {
           <button class="ju-btn" type="button" id="shareBtn">${icon('share-2')}Share</button>
           <button class="ju-btn icon-only" type="button" id="qrBtn" aria-label="QR code" title="QR code">${icon('qr-code')}</button>
         </div>
+        <button class="ask-link" type="button" data-ask data-code="${esc(D.code)}" data-title="${esc(D.title)}">${icon('message-square-text')}Ask about price, stock or delivery${icon('chevron-right')}</button>
       </div>
     </section>
+    ${mediaHtml()}
     ${othersHtml()}
-    ${contactHtml(SITE, D.title)}`;
+    ${contactHtml(SITE, D.title, D.code)}`;
 
   // "Read now" (or the cover) opens the reader over the page
   const read = () => openReader();
@@ -114,17 +134,39 @@ function showDoc() {
   if (!perf.lite && !(navigator.connection && navigator.connection.saveData)) idle(() => warmModule('/vendor/pdfjs/pdf.min.mjs'), 3500);
   ui(() => $('.v-cover img').addEventListener('click', read));
   document.querySelectorAll('a[download]').forEach((a) => a.addEventListener('click', () => M.nudgeDown(a.querySelector('.i'))));
+  wireDownload($('#dlBtn'));
   // start fetching the reader in the background, so it opens fast
   wireCommon(D.title, linkOf(D.code));
 
-  // one count per visit (the team's own "Open page" adds ?preview=1 and is not counted)
-  if (!preview && BOOT.countsScans !== false) ui(() => {
+  countVisit();
+
+}
+
+// one visit per catalogue per visit to the site (the team's own "Open page" adds ?preview=1 and is not counted)
+function countVisit() {
+  if (preview) return;
+  ui(() => {
     const k = 'seen_' + D.code;
     if (sessionStorage.getItem(k)) return;
     sessionStorage.setItem(k, '1');
-    navigator.sendBeacon ? navigator.sendBeacon(`/api/p/${encodeURIComponent(D.code)}/scan`) : fetch(`/api/p/${encodeURIComponent(D.code)}/scan`, { method: 'POST', keepalive: true });
+    track('visit', D.code);
   });
+}
 
+// A download link: the first download on this device may ask who is downloading (always skippable), then the file
+// comes; every download is counted.
+function wireDownload(a) {
+  if (!a) return;
+  a.addEventListener('click', (e) => {
+    if (!needsDetails()) { track('download', D.code); return; }
+    e.preventDefault();
+    beforeDownload({ from: a, onTop: !!a.closest('.reader-ov') }, () => {
+      track('download', D.code);
+      const t = document.createElement('a');
+      t.href = a.href; t.download = a.getAttribute('download') || ''; t.hidden = true;
+      document.body.appendChild(t); t.click(); t.remove();
+    });
+  });
 }
 
 // ---------- the reader: a full-screen window over the page ----------
@@ -171,6 +213,8 @@ function openReader() {
   document.addEventListener('keydown', onKey);
   $('#rClose', ov).addEventListener('click', (e) => { const b = e.currentTarget.getBoundingClientRect(); close(false, { x: b.left + b.width / 2, y: b.top + b.height / 2 }); });
   ov.querySelector('a[download]').addEventListener('click', (e) => M.nudgeDown(e.currentTarget.querySelector('.i')));
+  wireDownload(ov.querySelector('a[download]'));
+  track('read', D.code);
 
   let stopReader = () => {};
   function close(fromBack, at = null) {

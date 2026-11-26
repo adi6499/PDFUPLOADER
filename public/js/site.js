@@ -1,5 +1,5 @@
 // Pieces shared by the two public pages (the front page of all catalogues, and each catalogue's page).
-import { icon } from '/vendor/icons.js';
+import { icon } from '/vendor/icons.js?v=2';
 import { qrSvg, qrSvgFile, qrPng, saveBlob } from './qr.js';
 import * as M from './motion.js';
 import { assemble, enableHoverScatter, enableButtonParticles, swallow, sparkle } from './particles.js';
@@ -10,6 +10,7 @@ export const idle = (fn, wait = 1500) => { try { setTimeout(() => (window.reques
 export const warmModule = (href) => { try { if (document.querySelector(`link[rel="modulepreload"][href="${href}"]`)) return; const l = document.createElement('link'); l.rel = 'modulepreload'; l.href = href; document.head.appendChild(l); } catch {} };
 idle(() => warmModule('/js/card.js'), 2500);
 import { copyText, showCopied, flashLink } from './copy.js';
+import { querySheet, setSite, track } from './visitor.js';
 
 enableHoverScatter();    // big QR codes: the grains scatter away from the mouse or finger
 enableButtonParticles(); // every button press sprays a few grains; download buttons pour them in
@@ -70,7 +71,16 @@ function wireContactHover() {
 }
 try { wireContactHover(); } catch { /* cosmetic */ }
 
-export function contactHtml(SITE, title) {
+// any button marked data-ask opens "Send a query" (about the catalogue in data-code, if any)
+document.addEventListener('click', (e) => {
+  const b = e.target.closest && e.target.closest('[data-ask]');
+  if (!b) return;
+  e.preventDefault();
+  querySheet({ code: b.dataset.code || '', title: b.dataset.title || '', message: b.dataset.message || '', from: b, onTop: !!b.closest('.reader-ov') });
+});
+
+export function contactHtml(SITE, title, code = '') {
+  setSite(SITE);
   const C = SITE.contact || {};
   const items = [];
   const subj = title ? `About: ${title}` : 'Enquiry';
@@ -80,8 +90,11 @@ export function contactHtml(SITE, title) {
   if (C.website) items.push(`<a class="c-item" data-k="web" href="${esc(C.website)}" target="_blank" rel="noopener"><span class="c-ic">${icon('globe')}</span><span><b>Website</b><small>${esc(C.website.replace(/^https?:\/\//, ''))}</small></span>${GO}</a>`);
   const phones = (C.phones || []).map((p) => `<a href="tel:${esc(p.dial)}">${esc(p.display)}</a>`).join(' · ');
   return `<section class="ju-card contact">
-    <h2>Questions? Talk to us.</h2>
-    <p>${esc(SITE.company?.name || '')}${SITE.company?.tagline ? ' · ' + esc(SITE.company.tagline) : ''}</p>
+    <div class="contact-head">
+      <div><h2>Questions? Talk to us.</h2>
+      <p>${esc(SITE.company?.name || '')}${SITE.company?.tagline ? ' · ' + esc(SITE.company.tagline) : ''}</p></div>
+      <button class="ju-btn accent" type="button" data-ask data-code="${esc(code)}" data-title="${esc(title || '')}">${icon('message-square-text')}Send a query</button>
+    </div>
     <div class="c-grid">${items.join('')}</div>
     <p class="addr">${C.address ? esc(C.address) + '<br>' : ''}${phones}</p>
   </section>
@@ -97,7 +110,8 @@ export async function share(title, url) {
 
 // The Share window: grains burst out of the Share button and bind together as the QR code,
 // with the ways to send it underneath (WhatsApp, email, copy link, the QR picture, and the phone's own share menu).
-export function shareSheet({ link, title, from = null, site = {}, printable = true }) {
+export function shareSheet({ link, title, from = null, site = {}, printable = true, code = '' }) {
+  track('share', code);
   const ov = document.createElement('div');
   ov.className = 'ju-overlay';
   const safe = String(title || 'Jinharsh catalogues').replace(/[\\/:*?"<>|]+/g, ' ').trim().slice(0, 90);

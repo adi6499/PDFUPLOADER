@@ -1,10 +1,11 @@
 // The front page: every live catalogue, with brand filters and search.
 // Links from the old catalog.jinharsh.com hub keep working: /?cat=<name> opens that catalogue.
-import { icon } from '/vendor/icons.js';
+import { icon } from '/vendor/icons.js?v=2';
 import { fmtSize } from './pdfkit.js';
 import * as M from './motion.js';
 import { esc, ui, contactHtml, shareSheet, qrSheet, blankCover, toast } from './site.js';
 import { saveFiles } from './handoff.js';
+import { track } from './visitor.js';
 
 const $ = (s, el = document) => el.querySelector(s);
 const params = new URLSearchParams(location.search);
@@ -18,7 +19,11 @@ ui(() => {
   $('#hubQr').innerHTML = icon('qr-code');
   $('#hubShare').innerHTML = icon('share-2');
 });
-$('#hubQr').addEventListener('click', () => qrSheet({ link: S.publicUrl + '/', title: 'Jinharsh Catalogues' }));
+// the QR button opens QR Studio: every catalogue's code (and the front page's), for posters and visiting cards
+const studio = (from = null) => import('./studio.js')
+  .then((m) => m.openStudio({ catalogs: S.all, publicUrl: S.publicUrl, site: S.site, printable: S.printable, from }))
+  .catch(() => toast('Could not open QR Studio. Please try again.'));
+$('#hubQr').addEventListener('click', (e) => studio(e.currentTarget));
 
 // ---------- Upload, for the team ----------
 // Shown to whoever may use the team page (signed in, or the office Wi-Fi copy where it is open).
@@ -70,6 +75,8 @@ async function load() {
   $('#chips').innerHTML = ['', ...brands].map((b) => `<button type="button" class="ju-chip${b === S.brand ? ' on' : ''}" data-brand="${esc(b)}">${b ? esc(b) : 'All'}</button>`).join('');
   $('#contact').innerHTML = contactHtml(S.site, '');
   draw(true);
+  // catalog.jinharsh.com/?qr=1 opens QR Studio straight away (the address the team was given for it)
+  if (new URLSearchParams(location.search).get('qr') === '1') studio();
 }
 
 function visible() {
@@ -123,3 +130,5 @@ $('#cards').addEventListener('click', (e) => {
 });
 
 load();
+// one visit to the front page per visit to the site
+try { if (!sessionStorage.getItem('seen_hub')) { sessionStorage.setItem('seen_hub', '1'); track('hub'); } } catch {}

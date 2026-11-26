@@ -10,9 +10,14 @@ const nm = join(root, 'node_modules');
 const out = join(root, 'public', 'vendor');
 const kitDir = join(root, '..'); // the Jinharsh UI kit lives in Downloads, next to this project
 
+// the small Latin fonts the pages load are made by tools/subset-fonts.py (Python): keep them across a refresh
+const KEEP = ['fonts/Geist-Latin.woff2', 'fonts/GeistMono-Latin.woff2'];
+const kept = KEEP.map((f) => [f, existsSync(join(out, f)) ? readFileSync(join(out, f)) : null]);
 rmSync(out, { recursive: true, force: true });
 mkdirSync(join(out, 'pdfjs'), { recursive: true });
 mkdirSync(join(out, 'fonts'), { recursive: true });
+for (const [f, buf] of kept) if (buf) writeFileSync(join(out, f), buf);
+if (kept.some(([, b]) => !b)) console.log('Note: run  python tools/subset-fonts.py  to make the small Latin fonts the pages load.');
 
 // 1. PDF.js (Mozilla) - reads PDFs in the browser: covers, page counts, the reader on the scan page
 const pdf = join(nm, 'pdfjs-dist');
@@ -43,7 +48,9 @@ const ICONS = ['upload', 'qr-code', 'link', 'download', 'share-2', 'external-lin
   'archive-restore', 'trash-2', 'sun', 'moon', 'settings', 'search', 'chevron-down', 'check', 'phone', 'mail',
   'globe', 'message-circle', 'file-text', 'lock', 'printer', 'copy', 'x', 'plus', 'eye', 'scan-line', 'history',
   'book-open', 'arrow-down-to-line', 'monitor', 'smartphone', 'sliders-horizontal', 'circle-alert', 'image',
-  'pencil', 'arrow-left', 'arrow-up', 'maximize-2', 'zoom-in', 'zoom-out', 'circle-check', 'id-card', 'map-pin', 'file-down'];
+  'pencil', 'arrow-left', 'arrow-up', 'maximize-2', 'zoom-in', 'zoom-out', 'circle-check', 'id-card', 'map-pin', 'file-down',
+  'chart-column', 'users', 'message-square-text', 'calendar-days', 'file-spreadsheet', 'menu', 'play', 'video', 'wrench', 'badge-check',
+  'layout-grid', 'send', 'user', 'building-2', 'chevron-right'];
 const map = {};
 for (const name of ICONS) {
   const svg = readFileSync(join(nm, 'lucide-static', 'icons', name + '.svg'), 'utf8');
@@ -51,6 +58,8 @@ for (const name of ICONS) {
     .replace(/\s+/g, ' ').replace(/> </g, '><').trim();
   map[name] = inner;
 }
+// NOTE: pages import it as /vendor/icons.js?v=N. After adding icons, raise N everywhere (grep icons.js public),
+// so browsers that kept an older copy fetch the new one.
 writeFileSync(join(out, 'icons.js'),
   '// Lucide icons (ISC licence), only the ones this site uses. Made by tools/vendor.mjs - do not edit.\n' +
   'export const ICONS = ' + JSON.stringify(map, null, 0) + ';\n' +

@@ -32,5 +32,7 @@ export function loadConfig() {
   const LOOPBACK = HOST === '127.0.0.1' || HOST === 'localhost' || HOST === '::1';
   // team page open with no password (for trying it out on the office Wi-Fi); a team password, once set, still wins
   const TEAM_OPEN = String(env.TEAM_OPEN ?? cfg.teamOpen ?? 'false') === 'true';
-  return { cfg, ON_VERCEL, PORT, HOST, PUBLIC_URL, DATA_DIR, MAX_UPLOAD, TRUST_PROXY, STORAGE, TRIAL, PRINTABLE, LOOPBACK, TEAM_OPEN };
+  // where a copy of each visitor query is also sent (the company's Odoo bridge); empty = kept here only
+  const INQUIRY_FORWARD = String(env.INQUIRY_FORWARD ?? cfg.inquiryForward ?? '').trim();
+  return { cfg, ON_VERCEL, PORT, HOST, PUBLIC_URL, DATA_DIR, MAX_UPLOAD, TRUST_PROXY, STORAGE, TRIAL, PRINTABLE, LOOPBACK, TEAM_OPEN, INQUIRY_FORWARD };
 }

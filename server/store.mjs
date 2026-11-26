@@ -33,6 +33,16 @@ export function cleanNote(t) {
 export function cleanUrl(u) {
   try { const x = new URL(String(u ?? '').trim()); return x.protocol === 'https:' || x.protocol === 'http:' ? x.href.slice(0, 500) : ''; } catch { return ''; }
 }
+// videos, installation videos and trials & recommendations shown on a catalogue's page
+const MEDIA_KINDS = ['video', 'install', 'trial'];
+export function cleanMedia(list) {
+  if (!Array.isArray(list)) return [];
+  return list.slice(0, 24).map((m) => ({
+    kind: MEDIA_KINDS.includes(m?.kind) ? m.kind : 'video',
+    title: String(m?.title ?? '').replace(/[\u0000-\u001f\u007f]/g, ' ').replace(/\s+/g, ' ').trim().slice(0, 120),
+    url: cleanUrl(m?.url),
+  })).filter((m) => m.url);
+}
 export function cleanFileName(n) {
   const base = String(n ?? '').split(/[\\/]/).pop().replace(/[\u0000-\u001f\u007f"<>|:*?]/g, '').replace(/\s+/g, ' ').trim();
   const s = base.slice(0, 120) || 'document.pdf';
@@ -55,7 +65,7 @@ export class Store {
     await fs.mkdir(this.tmpDir, { recursive: true });
     try {
       const raw = JSON.parse(await fs.readFile(this.dbFile, 'utf8'));
-      this.db = { docs: Array.isArray(raw.docs) ? raw.docs : [], retired: Array.isArray(raw.retired) ? raw.retired : [] };
+      this.db = { ...raw, docs: Array.isArray(raw.docs) ? raw.docs : [], retired: Array.isArray(raw.retired) ? raw.retired : [] };
     } catch (e) {
       if (e.code !== 'ENOENT') throw new Error('db.json could not be read - fix or restore it before starting: ' + e.message);
     }
@@ -189,6 +199,7 @@ export class Store {
     if (patch.brand !== undefined) doc.brand = cleanTitle(patch.brand).slice(0, 60);
     if (patch.category !== undefined) doc.category = cleanTitle(patch.category).slice(0, 60);
     if (patch.sourceUrl !== undefined) doc.sourceUrl = cleanUrl(patch.sourceUrl);
+    if (patch.media !== undefined) doc.media = cleanMedia(patch.media);
     if (patch.status === 'live' || patch.status === 'archived') doc.status = patch.status;
     if (patch.current !== undefined) {
       const v = Number(patch.current);
