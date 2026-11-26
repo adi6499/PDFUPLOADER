@@ -28,11 +28,12 @@
 /* the top bar as clear "liquid glass" (like iOS): what scrolls under it stays in view, only a touch softer and brighter,
    behind a thin tint with a bright rim; it stays in place (no magnifying, so nothing shifts). A faint halo keeps the
    name readable over busy pictures. Works in every browser, iPhones included; slower phones (html.lite) keep a solid bar. */
-.ju:not(.lite) .ju-top.ju-glass { background: color-mix(in srgb, var(--bg) 16%, transparent);
+.ju:not(.lite) .ju-top.ju-glass { background: color-mix(in srgb, var(--bg) 24%, transparent);
   -webkit-backdrop-filter: blur(3px) saturate(1.5) brightness(1.08); backdrop-filter: blur(3px) saturate(1.5) brightness(1.08);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, .85), inset 0 -1px 0 rgba(255, 255, 255, .45), 0 12px 32px -18px rgba(20, 22, 28, .35); }
-.ju:not(.lite) .ju-top .brand span { text-shadow: 0 0 6px color-mix(in srgb, var(--bg) 85%, transparent), 0 0 2px color-mix(in srgb, var(--bg) 70%, transparent); }
-.ju.dark:not(.lite) .ju-top.ju-glass { background: color-mix(in srgb, var(--bg) 24%, transparent);
+.ju:not(.lite) .ju-top .brand span { text-shadow: 0 0 2px color-mix(in srgb, var(--bg) 90%, transparent), 0 0 8px color-mix(in srgb, var(--bg) 85%, transparent),
+  0 0 16px color-mix(in srgb, var(--bg) 60%, transparent); }
+.ju.dark:not(.lite) .ju-top.ju-glass { background: color-mix(in srgb, var(--bg) 32%, transparent);
   -webkit-backdrop-filter: blur(3px) saturate(1.5) brightness(.92); backdrop-filter: blur(3px) saturate(1.5) brightness(.92);
   box-shadow: inset 0 1px 0 rgba(255, 255, 255, .2), inset 0 -1px 0 rgba(255, 255, 255, .08), 0 12px 32px -18px rgba(0, 0, 0, .6); }
 /* extra top-bar buttons a site asks for (site.json "nav"): all of them on wide screens, one menu button on phones */
