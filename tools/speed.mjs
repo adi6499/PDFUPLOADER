@@ -125,7 +125,7 @@ async function main() {
       await cdp.send('Network.enable', {}, s);
       await cdp.send('Network.clearBrowserCache', {}, s);
       await cdp.send('Network.setCacheDisabled', { cacheDisabled: false }, s);
-      await cdp.send('Network.setBlockedURLs', { urls: ['*/api/track*'] }, s);
+      await cdp.send('Network.setBlockedURLs', { urls: ['*/api/track*', '*action=track*', '*action=inquiry*'] }, s); // (ours, and the PHP hub's)
       // Lighthouse's phone: Moto G Power sized screen, 4x slower processor, slow 4G (its "applied" settings)
       await cdp.send('Emulation.setDeviceMetricsOverride', { width: 412, height: 823, deviceScaleFactor: 1.75, mobile: true }, s);
       await cdp.send('Emulation.setUserAgentOverride', { userAgent: 'Mozilla/5.0 (Linux; Android 11; moto g power (2022)) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Mobile Safari/537.36' }, s);
