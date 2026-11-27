@@ -21,5 +21,14 @@ export async function sendInquiry(q) {
   if (!r.ok) throw new Error(j.error || 'Could not send. Please try again.');
 }
 
+// "who else is looking right now": where this visitor is (a catalogue's code, or '' for the front page) -> how many
+// people are on the site and on each catalogue: { total, cats: { code: n } }. leave = this page is closing.
+export async function sendPing({ code = '', id = '', leave = false }) {
+  const body = JSON.stringify({ code, id, leave });
+  if (leave) { try { navigator.sendBeacon('/api/ping', new Blob([body], { type: 'application/json' })); } catch {} return null; }
+  const r = await fetch('/api/ping', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body, cache: 'no-store' });
+  return r.ok ? r.json() : null;
+}
+
 // may this person upload catalogues (the Upload button on the front page)
 export const canUpload = () => fetch('/api/info').then((r) => r.json()).then((i) => !!(i && i.auth && i.auth.signedIn)).catch(() => false);

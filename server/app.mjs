@@ -363,6 +363,16 @@ export async function createApp(overrides = {}) {
     }
   }
 
+  // who is on the site right now: page id -> { c: catalogue code ('' = front page), t: when it last said so }
+  const presence = (() => {
+    const seen = new Map();
+    const prune = () => { const t = Date.now(); for (const [k, v] of seen) if (t - v.t > 75000) seen.delete(k); };
+    return {
+      touch(id, code, leave) { prune(); if (leave) seen.delete(id); else if (seen.size < 5000 || seen.has(id)) seen.set(id, { c: code, t: Date.now() }); },
+      counts() { prune(); const cats = {}; for (const v of seen.values()) if (v.c) cats[v.c] = (cats[v.c] || 0) + 1; return { ok: true, total: seen.size, cats }; },
+    };
+  })();
+
   // ---------- API ----------
   async function api(req, res, url, parts) {
     const m = req.method;
@@ -405,6 +415,14 @@ export async function createApp(overrides = {}) {
       if (tooMany(req, 'track', 120, 60000)) req.resume();
       else { let b = {}; try { b = await readJsonBody(req, 8192); } catch {} recordEvent(req, b); }
       res.writeHead(204, { 'Cache-Control': 'no-store' }); return res.end();
+    }
+    // public: "who else is looking right now" (public/js/live.js). Each open page says where it is about every 30 s;
+    // only counts come back, and nothing is written down (it lives in memory for 75 seconds)
+    if (parts[1] === 'ping' && m === 'POST') {
+      if (tooMany(req, 'ping', 20, 60000)) { req.resume(); return send(res, 200, presence.counts(), { 'Cache-Control': 'no-store' }); }
+      let b = {}; try { b = await readJsonBody(req, 1024); } catch {}
+      presence.touch(String(b.id || clientIp(req)).slice(0, 40), String(b.code || '').slice(0, 120), !!b.leave);
+      return send(res, 200, presence.counts(), { 'Cache-Control': 'no-store' });
     }
     // public: a visitor's question about a product. Saved here, and a copy goes to the company's Odoo bridge if set.
     if (parts[1] === 'inquiry' && m === 'POST') {
