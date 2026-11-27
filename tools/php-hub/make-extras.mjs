@@ -2,6 +2,8 @@
 //   - pictures of pages 2-5 (540 px wide, WebP) for Quick look and the cards' turning pages:
 //       covers/<id>-p2.webp ... -p5.webp, and "peek": <how many> in covers/covers.json
 //   - the text of every page, for searching inside the catalogues: search/index.json { v, made, cats: { id: [page texts] } }
+//   - a small, light picture of EVERY page (300 px wide), shown at once by the reader while the sharp page is still
+//     coming: previews/<id>/<n>.webp, and "prev": <pages> in covers.json
 //   node tools/php-hub/make-extras.mjs <site folder>  [https://catalog.jinharsh.com]  [--again]
 // Run make-covers.mjs first (this uses its covers.json). Catalogues done before are skipped unless --again.
 // The PDFs are read from the live site in pieces (a PDF on another website: the hub's own copy in mirror/).
@@ -20,7 +22,7 @@ if (!SITE) { console.error('Which site folder? node tools/php-hub/make-extras.mj
 const COVERS = path.join(SITE, 'covers'), SEARCH = path.join(SITE, 'search');
 const PDFJS = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..', 'public', 'vendor', 'pdfjs');
 const CHROME = ['C:/Program Files/Google/Chrome/Application/chrome.exe', 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe', '/usr/bin/google-chrome'].find((p) => existsSync(p));
-const PEEK = 4, WIDTH = 540, MAX_TEXT = 6000;
+const PEEK = 4, WIDTH = 540, MAX_TEXT = 6000, PREV_W = 300;
 
 const list = await (await fetch(`${LIVE}/hub/api.php?action=catalogs`)).json();
 let meta = {};
@@ -30,7 +32,7 @@ try { index = JSON.parse(await fs.readFile(path.join(SEARCH, 'index.json'), 'utf
 const abs = (u) => (/^https?:/i.test(u) ? u : LIVE + u);
 const todo = list.filter((c) => /\.pdf(\?|#|$)/i.test(c.pdfUrl || ''))
   .map((c) => ({ id: c.id, url: abs((meta[c.id] && meta[c.id].file) || c.pdfUrl) }))
-  .filter((t) => AGAIN || !(meta[t.id] && meta[t.id].peek !== undefined && index.cats[t.id]));
+  .filter((t) => AGAIN || !(meta[t.id] && meta[t.id].peek !== undefined && index.cats[t.id] && meta[t.id].prev));
 await fs.mkdir(COVERS, { recursive: true });
 await fs.mkdir(SEARCH, { recursive: true });
 console.log(`${todo.length} catalogue(s) to do`);
@@ -59,13 +61,21 @@ for (const t of ${JSON.stringify(todo)}) {
     const pages = [];
     for (let n = 1; n <= doc.numPages; n++) {
       const page = await doc.getPage(n);
+      {   // the small picture of this page
+        const base = page.getViewport({ scale: 1 });
+        const vp = page.getViewport({ scale: ${PREV_W} / base.width });
+        const cv = document.createElement('canvas'); cv.width = Math.round(vp.width); cv.height = Math.round(vp.height);
+        const g = cv.getContext('2d', { alpha: false }); g.fillStyle = '#fff'; g.fillRect(0, 0, cv.width, cv.height);
+        await page.render({ canvasContext: g, canvas: cv, viewport: vp, background: '#ffffff' }).promise;
+        await fetch('/prev?id=' + encodeURIComponent(t.id) + '&n=' + n, { method: 'POST', body: await blob(cv, 0.6) });
+      }
       const tc = await page.getTextContent();
       let s = '';
       for (const it of tc.items) { if (typeof it.str === 'string') s += it.str + (it.hasEOL ? ' ' : ''); }
       pages.push(s.replace(/\\s+/g, ' ').trim().slice(0, ${MAX_TEXT}));
       page.cleanup();
     }
-    await fetch('/text?id=' + encodeURIComponent(t.id) + '&peek=' + peek, { method: 'POST', body: JSON.stringify(pages) });
+    await fetch('/text?id=' + encodeURIComponent(t.id) + '&peek=' + peek + '&prev=' + doc.numPages, { method: 'POST', body: JSON.stringify(pages) });
     await task.destroy();
   } catch (e) { await fetch('/fail?id=' + encodeURIComponent(t.id), { method: 'POST', body: String(e && e.message || e) }); }
 }
@@ -99,15 +109,18 @@ const server = http.createServer(async (req, res) => {
     let body = []; for await (const c of req) body.push(c); body = Buffer.concat(body);
     const id = u.searchParams.get('id');
     const ok = id && /^[a-z0-9-]{1,120}$/i.test(id);
-    if (u.pathname === '/save' && ok) {
+    if (u.pathname === '/prev' && ok) {
+      const n = Number(u.searchParams.get('n'));
+      if (n >= 1 && n <= 5000) { await fs.mkdir(path.join(SITE, 'previews', id), { recursive: true }); await fs.writeFile(path.join(SITE, 'previews', id, `${n}.webp`), body); }
+    } else if (u.pathname === '/save' && ok) {
       const n = Number(u.searchParams.get('n'));
       if (n >= 2 && n <= PEEK + 1) await fs.writeFile(path.join(COVERS, `${id}-p${n}.webp`), body);
     } else if (u.pathname === '/text' && ok) {
       const pages = JSON.parse(body.toString('utf8'));
       index.cats[id] = pages;
-      meta[id] = { ...(meta[id] || {}), peek: Number(u.searchParams.get('peek')) || 0 };
+      meta[id] = { ...(meta[id] || {}), peek: Number(u.searchParams.get('peek')) || 0, prev: Number(u.searchParams.get('prev')) || 0 };
       const chars = pages.reduce((a, p) => a + p.length, 0);
-      console.log(`  ${id}: ${meta[id].peek} page pictures, text of ${pages.length} pages (${(chars / 1024).toFixed(0)} K letters)`);
+      console.log(`  ${id}: ${meta[id].peek} page pictures, ${meta[id].prev} small page previews, text of ${pages.length} pages (${(chars / 1024).toFixed(0)} K letters)`);
     } else if (u.pathname === '/fail') console.log(`  ${id}: could not read it (${body.toString().slice(0, 140)})`);
     else if (u.pathname === '/done') finish();
     res.writeHead(204); res.end();
