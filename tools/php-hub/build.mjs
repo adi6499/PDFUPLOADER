@@ -67,7 +67,7 @@ for (const f of await fs.readdir(path.join(DEST, 'js'))) {
 
 // 3. styles, the kit, fonts, icons, the PDF reader, pictures
 await fs.mkdir(path.join(DEST, 'css'), { recursive: true });
-for (const f of ['app.css', 'view.css', 'hub.css']) await fs.writeFile(path.join(DEST, 'css', f), fix(await read(path.join(PUB, 'css', f))));
+for (const f of ['app.css', 'view.css', 'hub.css', 'depth.css']) await fs.writeFile(path.join(DEST, 'css', f), fix(await read(path.join(PUB, 'css', f))));
 await fs.mkdir(path.join(DEST, 'vendor'), { recursive: true });
 for (const f of ['jinharsh-ui.css', 'jinharsh-ui.js']) await fs.copyFile(path.join(PUB, 'vendor', f), path.join(DEST, 'vendor', f)); // the kit, unchanged
 await fs.writeFile(path.join(DEST, 'vendor', 'icons.js'), await read(path.join(PUB, 'vendor', 'icons.js')));
