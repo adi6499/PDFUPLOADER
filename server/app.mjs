@@ -416,13 +416,13 @@ export async function createApp(overrides = {}) {
       else { let b = {}; try { b = await readJsonBody(req, 8192); } catch {} recordEvent(req, b); }
       res.writeHead(204, { 'Cache-Control': 'no-store' }); return res.end();
     }
-    // public: "who else is looking right now" (public/js/live.js). Each open page says where it is about every 30 s;
-    // only counts come back, and nothing is written down (it lives in memory for 75 seconds)
+    // public: "I am on this page" (public/js/live.js), about every 30 s from each open page. Only the team sees the
+    // counts (with the insights below); a visitor gets back just "ok". Nothing is written down: 75 seconds in memory.
     if (parts[1] === 'ping' && m === 'POST') {
-      if (tooMany(req, 'ping', 20, 60000)) { req.resume(); return send(res, 200, presence.counts(), { 'Cache-Control': 'no-store' }); }
+      if (tooMany(req, 'ping', 20, 60000)) { req.resume(); return send(res, 200, { ok: true }, { 'Cache-Control': 'no-store' }); }
       let b = {}; try { b = await readJsonBody(req, 1024); } catch {}
       presence.touch(String(b.id || clientIp(req)).slice(0, 40), String(b.code || '').slice(0, 120), !!b.leave);
-      return send(res, 200, presence.counts(), { 'Cache-Control': 'no-store' });
+      return send(res, 200, { ok: true }, { 'Cache-Control': 'no-store' });
     }
     // public: a visitor's question about a product. Saved here, and a copy goes to the company's Odoo bridge if set.
     if (parts[1] === 'inquiry' && m === 'POST') {
@@ -475,7 +475,7 @@ export async function createApp(overrides = {}) {
       }
       const got = await activity.insights(exhibition(), store.list());
       return send(res, 200, { summary: got.summary, events: got.recent, inquiries: got.inquiries,
-        exhibition: exhibition(), keepsVisits: !BLOB, forwards: !!INQUIRY_FORWARD });
+        exhibition: exhibition(), keepsVisits: !BLOB, forwards: !!INQUIRY_FORWARD, live: presence.counts() });
     }
     // the exhibition: its name and first and last day (visits are then marked before / during / after)
     if (parts[1] === 'settings' && m === 'PUT') {

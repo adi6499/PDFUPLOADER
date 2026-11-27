@@ -21,8 +21,8 @@ export async function sendInquiry(q) {
   if (!r.ok) throw new Error(j.error || 'Could not send. Please try again.');
 }
 
-// "who else is looking right now": where this visitor is (a catalogue's code, or '' for the front page) -> how many
-// people are on the site and on each catalogue: { total, cats: { code: n } }. leave = this page is closing.
+// "I am on this page" (a catalogue's code, or '' for the front page), so the team can see who is looking right now;
+// visitors get back only { ok }. leave = this page is closing.
 export async function sendPing({ code = '', id = '', leave = false }) {
   const body = JSON.stringify({ code, id, leave });
   if (leave) { try { navigator.sendBeacon('/api/ping', new Blob([body], { type: 'application/json' })); } catch {} return null; }
